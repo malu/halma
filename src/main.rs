@@ -67,19 +67,57 @@ impl Default for Board {
 fn draw_board(canvas: &mut sdl2::render::WindowCanvas, board: &Board) {
     for y in 0..BOARD_HEIGHT as i8 {
         for x in 0..BOARD_WIDTH as i8 {
-            let draw_y = 120 + y as i32*20;
-            let draw_x = if y % 2 == 0 {
-                260 + x as i32 * 20
-            } else {
-                260 + x as i32 * 20 - 10
-            };
-
             let tile = board.get(x, y);
             canvas.set_draw_color(Color::RGB(0, 0, 0));
             if tile == Tile::Empty {
+                let (draw_x, draw_y) = board_space_to_screen_space(x, y);
                 canvas.fill_rect(Some(sdl2::rect::Rect::new(draw_x-4, draw_y-4, 8, 8))).unwrap();
             }
         }
+    }
+}
+
+fn board_space_to_screen_space(x: i8, y: i8) -> (i32, i32) {
+    let screen_y = 120 + y as i32*20;
+    let screen_x = if y % 2 == 0 {
+        260 + x as i32 * 20
+    } else {
+        260 + x as i32 * 20 - 10
+    };
+
+    (screen_x, screen_y)
+}
+
+fn nearest_board_position(board: &Board, x: i32, y: i32) -> Option<(i8, i8)> {
+    fn dist(x: i32, y: i32, x2: i32, y2: i32) -> f32 {
+        ((x-x2).pow(2) as f32 + (y-y2).pow(2) as f32).sqrt()
+    }
+
+    let mut min_x = None;
+    let mut min_y = None;
+    let mut min_d = None;
+
+    for by in 0..BOARD_HEIGHT as i8 {
+        for bx in 0..BOARD_WIDTH as i8 {
+            if board.get(bx, by) == Tile::Invalid {
+                continue;
+            }
+
+            let (sx, sy) = board_space_to_screen_space(bx, by);
+
+            let d = dist(x, y, sx, sy);
+            if min_d == None || d < min_d.unwrap() {
+                min_x = Some(bx);
+                min_y = Some(by);
+                min_d = Some(d);
+            }
+        }
+    }
+
+    if min_d == None || min_d.unwrap() > 15.0 {
+        None
+    } else {
+        Some((min_x.unwrap(), min_y.unwrap()))
     }
 }
 
@@ -94,17 +132,33 @@ fn main() {
     canvas.present();
 
     let board: Board = Default::default();
+    let mut mouse_x = 0;
+    let mut mouse_y = 0;
 
     let mut events = sdl.event_pump().unwrap();
     'mainloop: loop {
+        canvas.set_draw_color(Color::RGB(224, 224, 224));
+        canvas.clear();
+
         for event in events.poll_iter() {
             match event {
                 Event::Quit {..} | Event::KeyDown { keycode: Some(Keycode::Escape), .. } => break 'mainloop,
+                Event::MouseMotion { x, y, .. } => {
+                    mouse_x = x;
+                    mouse_y = y;
+                },
                 _ => {}
             }
         }
 
         draw_board(&mut canvas, &board);
+
+        if let Some((x, y)) = nearest_board_position(&board, mouse_x, mouse_y) {
+            let (screen_x, screen_y) = board_space_to_screen_space(x, y);
+            canvas.set_draw_color(Color::RGB(255, 0, 0));
+            canvas.draw_rect(sdl2::rect::Rect::new(screen_x-5, screen_y-5, 10, 10)).unwrap();
+        }
+
         canvas.present();
         ::std::thread::sleep(::std::time::Duration::new(0, 1_000_000_000u32 / 60));
     }
