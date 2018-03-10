@@ -42,6 +42,10 @@ impl Board {
     }
 
     fn get(&self, x: i8, y: i8) -> Tile {
+        if x < 0 || y < 0 || x as u8 >= BOARD_WIDTH || y as u8 >= BOARD_HEIGHT {
+            return Tile::Invalid;
+        }
+
         self.board[x as usize][y as usize]
     }
 }
