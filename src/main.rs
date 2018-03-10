@@ -48,6 +48,18 @@ impl Board {
 
         self.board[x as usize][y as usize]
     }
+
+    fn reachable_from(&self, x: i8, y: i8) -> Vec<(i8, i8)> {
+        let mut result = Vec::new();
+
+        for &(dx, dy) in &[(-1, 0), (1, 0), (-y%2+1, 1), (-y%2, 1), (-y%2+1, -1), (-y%2, -1)] {
+            if self.get(x+dx, y+dy) != Tile::Invalid {
+                result.push((x+dx, y+dy));
+            }
+        }
+
+        result
+    }
 }
 
 impl Default for Board {
