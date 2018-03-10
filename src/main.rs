@@ -173,6 +173,12 @@ fn main() {
             let (screen_x, screen_y) = board_space_to_screen_space(x, y);
             canvas.set_draw_color(Color::RGB(255, 0, 0));
             canvas.draw_rect(sdl2::rect::Rect::new(screen_x-5, screen_y-5, 10, 10)).unwrap();
+
+            for (rx, ry) in board.reachable_from(x, y) {
+                let (screen_x, screen_y) = board_space_to_screen_space(rx, ry);
+                canvas.set_draw_color(Color::RGB(0, 255, 0));
+                canvas.draw_rect(sdl2::rect::Rect::new(screen_x-5, screen_y-5, 10, 10)).unwrap();
+            }
         }
 
         canvas.present();
