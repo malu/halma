@@ -215,6 +215,7 @@ fn main() {
         for event in events.poll_iter() {
             match event {
                 Event::Quit {..} | Event::KeyDown { keycode: Some(Keycode::Escape), .. } => break 'mainloop,
+                Event::KeyDown { keycode: Some(Keycode::R), .. } => board = Default::default(),
                 Event::MouseMotion { x, y, .. } => {
                     mouse_x = x;
                     mouse_y = y;
