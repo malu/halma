@@ -101,6 +101,16 @@ impl Board {
         result.retain(|&pos| pos != (x, y));
         result
     }
+
+    fn move_piece(&mut self, (fx, fy): (i8, i8), (tx, ty): (i8, i8)) {
+        if !self.is_valid_location(fx, fy) || !self.is_valid_location(tx, ty) {
+            panic!("Invalid locations for move_piece");
+        }
+
+        let from = self.get(fx, fy);
+        self.set(tx, ty, from);
+        self.set(fx, fy, Tile::Empty);
+    }
 }
 
 impl Default for Board {
@@ -224,9 +234,7 @@ fn main() {
                         Some((x, y)) => {
                             if let Some((bx, by)) = nearest_board_position(&board, mouse_x, mouse_y) {
                                 if board.reachable_from(x, y).contains(&(bx, by)) {
-                                    let from = board.get(x, y);
-                                    board.set(bx, by, from);
-                                    board.set(x, y, Tile::Empty);
+                                    board.move_piece((x, y), (bx, by));
                                 }
                             }
 
