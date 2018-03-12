@@ -16,13 +16,15 @@ impl Tile {
         let (draw_x, draw_y) = board_space_to_screen_space(board_x, board_y);
 
         match self {
-            Tile::Empty => canvas.set_draw_color(Color::RGB(0, 0, 0)),
-            Tile::Player(id) => canvas.set_draw_color(player_color(id)),
+            Tile::Empty => {
+                canvas.set_draw_color(Color::RGB(64, 64, 64));
+                canvas.fill_rect(Some(sdl2::rect::Rect::new(draw_x-3, draw_y-3, 6, 6))).unwrap();
+            }
+            Tile::Player(id) => {
+                canvas.set_draw_color(player_color(id));
+                canvas.fill_rect(Some(sdl2::rect::Rect::new(draw_x-4, draw_y-4, 8, 8))).unwrap();
+            }
             _ => {}
-        }
-
-        if self != Tile::Invalid {
-            canvas.fill_rect(Some(sdl2::rect::Rect::new(draw_x-4, draw_y-4, 8, 8))).unwrap();
         }
     }
 }
