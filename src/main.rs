@@ -126,9 +126,9 @@ impl Default for Board {
                 if !board.is_valid_location(x, y) {
                     continue;
                 }
-                if y < 6 {
+                if y < 7 && (x-6).abs() < 3 {
                     board.set(x, y, Tile::Player(1));
-                } else if y > 14 {
+                } else if y > 13  && (x-6).abs() < 3 {
                     board.set(x, y, Tile::Player(2));
                 } else {
                     board.set(x, y, Tile::Empty);
