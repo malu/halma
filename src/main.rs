@@ -40,10 +40,11 @@ fn player_color(id: u8) -> Color {
 const BOARD_WIDTH: u8 = 13;
 const BOARD_HEIGHT: u8 = 19;
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 struct Board {
     board: [[Tile; BOARD_HEIGHT as usize]; BOARD_WIDTH as usize],
     current_player: u8,
+    moves: Vec<((i8, i8), (i8, i8))>,
 }
 
 impl Board {
@@ -110,9 +111,20 @@ impl Board {
             panic!("Invalid locations for move_piece");
         }
 
+        self.moves.push(((fx, fy), (tx, ty)));
         let from = self.get(fx, fy);
         self.set(tx, ty, from);
         self.set(fx, fy, Tile::Empty);
+        self.current_player = 3-self.current_player;
+    }
+
+    fn undo(&mut self) {
+        if let Some(((fx, fy), (tx, ty))) = self.moves.pop() {
+            let from = self.get(tx, ty);
+            self.set(fx, fy, from);
+            self.set(tx, ty, Tile::Empty);
+            self.current_player = 3-self.current_player;
+        }
     }
 }
 
@@ -121,6 +133,7 @@ impl Default for Board {
         let mut board = Board {
             board: [[Tile::Invalid; BOARD_HEIGHT as usize]; BOARD_WIDTH as usize],
             current_player: 1,
+            moves: Vec::new(),
         };
 
         for y in 0..BOARD_HEIGHT as i8 {
@@ -220,6 +233,7 @@ fn main() {
             match event {
                 Event::Quit {..} | Event::KeyDown { keycode: Some(Keycode::Escape), .. } => break 'mainloop,
                 Event::KeyDown { keycode: Some(Keycode::R), .. } => board = Default::default(),
+                Event::KeyDown { keycode: Some(Keycode::U), .. } => board.undo(),
                 Event::MouseMotion { x, y, .. } => {
                     mouse_x = x;
                     mouse_y = y;
@@ -240,7 +254,6 @@ fn main() {
                             if let Some((bx, by)) = nearest_board_position(&board, mouse_x, mouse_y) {
                                 if board.reachable_from(x, y).contains(&(bx, by)) {
                                     board.move_piece((x, y), (bx, by));
-                                    board.current_player = 3-board.current_player;
                                 }
                             }
 
