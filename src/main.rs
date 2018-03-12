@@ -41,6 +41,7 @@ const BOARD_HEIGHT: u8 = 19;
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 struct Board {
     board: [[Tile; BOARD_HEIGHT as usize]; BOARD_WIDTH as usize],
+    current_player: u8,
 }
 
 impl Board {
@@ -117,6 +118,7 @@ impl Default for Board {
     fn default() -> Self {
         let mut board = Board {
             board: [[Tile::Invalid; BOARD_HEIGHT as usize]; BOARD_WIDTH as usize],
+            current_player: 1,
         };
 
         for y in 0..BOARD_HEIGHT as i8 {
@@ -225,7 +227,7 @@ fn main() {
                         None => {
                             if let Some((x, y)) = nearest_board_position(&board, mouse_x, mouse_y) {
                                 let tile = board.get(x, y);
-                                if let Tile::Player(pid) = tile {
+                                if tile == Tile::Player(board.current_player) {
                                     selection = Some((x, y));
                                 } else {
                                     selection = None;
@@ -236,6 +238,7 @@ fn main() {
                             if let Some((bx, by)) = nearest_board_position(&board, mouse_x, mouse_y) {
                                 if board.reachable_from(x, y).contains(&(bx, by)) {
                                     board.move_piece((x, y), (bx, by));
+                                    board.current_player = 3-board.current_player;
                                 }
                             }
 
@@ -251,9 +254,9 @@ fn main() {
 
         if let Some((x, y)) = nearest_board_position(&board, mouse_x, mouse_y) {
             let tile = board.get(x, y);
-            if let Tile::Player(pid) = tile {
+            if tile == Tile::Player(board.current_player) {
                 let (screen_x, screen_y) = board_space_to_screen_space(x, y);
-                canvas.set_draw_color(player_color(pid));
+                canvas.set_draw_color(player_color(board.current_player));
                 canvas.draw_rect(sdl2::rect::Rect::new(screen_x-6, screen_y-6, 12, 12)).unwrap();
             }
         }
@@ -271,6 +274,9 @@ fn main() {
                 canvas.draw_rect(sdl2::rect::Rect::new(screen_x-6, screen_y-6, 12, 12)).unwrap();
             }
         }
+
+        canvas.set_draw_color(player_color(board.current_player));
+        canvas.fill_rect(Some(sdl2::rect::Rect::new(0, 0, 24, 24))).unwrap();
 
         canvas.present();
         ::std::thread::sleep(::std::time::Duration::new(0, 1_000_000_000u32 / 60));
