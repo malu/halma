@@ -40,14 +40,19 @@ fn player_color(id: u8) -> Color {
 const BOARD_WIDTH: u8 = 13;
 const BOARD_HEIGHT: u8 = 19;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-struct Board {
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+struct GameState {
     board: [[Tile; BOARD_HEIGHT as usize]; BOARD_WIDTH as usize],
     current_player: u8,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct Game {
+    state: GameState,
     moves: Vec<((i8, i8), (i8, i8))>,
 }
 
-impl Board {
+impl GameState {
     fn is_valid_location(&self, x: i8, y: i8) -> bool {
         let width = match y {
             0...5 => y+1,
@@ -105,60 +110,61 @@ impl Board {
         result.retain(|&pos| pos != (x, y));
         result
     }
+}
 
+impl Game {
     fn move_piece(&mut self, (fx, fy): (i8, i8), (tx, ty): (i8, i8)) {
-        if !self.is_valid_location(fx, fy) || !self.is_valid_location(tx, ty) {
+        if !self.state.is_valid_location(fx, fy) || !self.state.is_valid_location(tx, ty) {
             panic!("Invalid locations for move_piece");
         }
 
         self.moves.push(((fx, fy), (tx, ty)));
-        let from = self.get(fx, fy);
-        self.set(tx, ty, from);
-        self.set(fx, fy, Tile::Empty);
-        self.current_player = 3-self.current_player;
+        let from = self.state.get(fx, fy);
+        self.state.set(tx, ty, from);
+        self.state.set(fx, fy, Tile::Empty);
+        self.state.current_player = 3-self.state.current_player;
     }
 
     fn undo(&mut self) {
         if let Some(((fx, fy), (tx, ty))) = self.moves.pop() {
-            let from = self.get(tx, ty);
-            self.set(fx, fy, from);
-            self.set(tx, ty, Tile::Empty);
-            self.current_player = 3-self.current_player;
+            let from = self.state.get(tx, ty);
+            self.state.set(fx, fy, from);
+            self.state.set(tx, ty, Tile::Empty);
+            self.state.current_player = 3-self.state.current_player;
         }
     }
 }
 
-impl Default for Board {
+impl Default for GameState {
     fn default() -> Self {
-        let mut board = Board {
+        let mut state = GameState {
             board: [[Tile::Invalid; BOARD_HEIGHT as usize]; BOARD_WIDTH as usize],
             current_player: 1,
-            moves: Vec::new(),
         };
 
         for y in 0..BOARD_HEIGHT as i8 {
             for x in 0..BOARD_WIDTH as i8 {
-                if !board.is_valid_location(x, y) {
+                if !state.is_valid_location(x, y) {
                     continue;
                 }
                 if y < 7 && (x-6).abs() < 3 {
-                    board.set(x, y, Tile::Player(1));
+                    state.set(x, y, Tile::Player(1));
                 } else if y > 13  && (x-6).abs() < 3 {
-                    board.set(x, y, Tile::Player(2));
+                    state.set(x, y, Tile::Player(2));
                 } else {
-                    board.set(x, y, Tile::Empty);
+                    state.set(x, y, Tile::Empty);
                 }
             }
         }
 
-        board
+        state
     }
 }
 
-fn draw_board(canvas: &mut sdl2::render::WindowCanvas, board: &Board) {
+fn draw_board(canvas: &mut sdl2::render::WindowCanvas, state: &GameState) {
     for y in 0..BOARD_HEIGHT as i8 {
         for x in 0..BOARD_WIDTH as i8 {
-            let tile = board.get(x, y);
+            let tile = state.get(x, y);
             canvas.set_draw_color(Color::RGB(0, 0, 0));
             tile.draw(canvas, x, y);
         }
@@ -176,7 +182,7 @@ fn board_space_to_screen_space(x: i8, y: i8) -> (i32, i32) {
     (screen_x, screen_y)
 }
 
-fn nearest_board_position(board: &Board, x: i32, y: i32) -> Option<(i8, i8)> {
+fn nearest_board_position(state: &GameState, x: i32, y: i32) -> Option<(i8, i8)> {
     fn dist(x: i32, y: i32, x2: i32, y2: i32) -> f32 {
         ((x-x2).pow(2) as f32 + (y-y2).pow(2) as f32).sqrt()
     }
@@ -187,7 +193,7 @@ fn nearest_board_position(board: &Board, x: i32, y: i32) -> Option<(i8, i8)> {
 
     for by in 0..BOARD_HEIGHT as i8 {
         for bx in 0..BOARD_WIDTH as i8 {
-            if board.get(bx, by) == Tile::Invalid {
+            if state.get(bx, by) == Tile::Invalid {
                 continue;
             }
 
@@ -219,7 +225,7 @@ fn main() {
     canvas.clear();
     canvas.present();
 
-    let mut board: Board = Default::default();
+    let mut game: Game = Default::default();
     let mut mouse_x = 0;
     let mut mouse_y = 0;
     let mut selection = None;
@@ -232,8 +238,8 @@ fn main() {
         for event in events.poll_iter() {
             match event {
                 Event::Quit {..} | Event::KeyDown { keycode: Some(Keycode::Escape), .. } => break 'mainloop,
-                Event::KeyDown { keycode: Some(Keycode::R), .. } => board = Default::default(),
-                Event::KeyDown { keycode: Some(Keycode::U), .. } => board.undo(),
+                Event::KeyDown { keycode: Some(Keycode::R), .. } => game = Default::default(),
+                Event::KeyDown { keycode: Some(Keycode::U), .. } => game.undo(),
                 Event::MouseMotion { x, y, .. } => {
                     mouse_x = x;
                     mouse_y = y;
@@ -241,9 +247,9 @@ fn main() {
                 Event::MouseButtonDown { x: mouse_x, y: mouse_y, .. } => {
                     match selection {
                         None => {
-                            if let Some((x, y)) = nearest_board_position(&board, mouse_x, mouse_y) {
-                                let tile = board.get(x, y);
-                                if tile == Tile::Player(board.current_player) {
+                            if let Some((x, y)) = nearest_board_position(&game.state, mouse_x, mouse_y) {
+                                let tile = game.state.get(x, y);
+                                if tile == Tile::Player(game.state.current_player) {
                                     selection = Some((x, y));
                                 } else {
                                     selection = None;
@@ -251,9 +257,9 @@ fn main() {
                             }
                         }
                         Some((x, y)) => {
-                            if let Some((bx, by)) = nearest_board_position(&board, mouse_x, mouse_y) {
-                                if board.reachable_from(x, y).contains(&(bx, by)) {
-                                    board.move_piece((x, y), (bx, by));
+                            if let Some((bx, by)) = nearest_board_position(&game.state, mouse_x, mouse_y) {
+                                if game.state.reachable_from(x, y).contains(&(bx, by)) {
+                                    game.move_piece((x, y), (bx, by));
                                 }
                             }
 
@@ -265,32 +271,32 @@ fn main() {
             }
         }
 
-        draw_board(&mut canvas, &board);
+        draw_board(&mut canvas, &game.state);
 
-        if let Some((x, y)) = nearest_board_position(&board, mouse_x, mouse_y) {
-            let tile = board.get(x, y);
-            if tile == Tile::Player(board.current_player) {
+        if let Some((x, y)) = nearest_board_position(&game.state, mouse_x, mouse_y) {
+            let tile = game.state.get(x, y);
+            if tile == Tile::Player(game.state.current_player) {
                 let (screen_x, screen_y) = board_space_to_screen_space(x, y);
-                canvas.set_draw_color(player_color(board.current_player));
+                canvas.set_draw_color(player_color(game.state.current_player));
                 canvas.draw_rect(sdl2::rect::Rect::new(screen_x-6, screen_y-6, 12, 12)).unwrap();
             }
         }
 
         if let Some((x, y)) = selection {
-            if let Tile::Player(pid) = board.get(x, y) {
+            if let Tile::Player(pid) = game.state.get(x, y) {
                 let (screen_x, screen_y) = board_space_to_screen_space(x, y);
                 canvas.set_draw_color(player_color(pid));
                 canvas.draw_rect(sdl2::rect::Rect::new(screen_x-6, screen_y-6, 12, 12)).unwrap();
             }
 
-            for (rx, ry) in board.reachable_from(x, y) {
+            for (rx, ry) in game.state.reachable_from(x, y) {
                 let (screen_x, screen_y) = board_space_to_screen_space(rx, ry);
                 canvas.set_draw_color(Color::RGB(0, 0, 0));
                 canvas.draw_rect(sdl2::rect::Rect::new(screen_x-6, screen_y-6, 12, 12)).unwrap();
             }
         }
 
-        canvas.set_draw_color(player_color(board.current_player));
+        canvas.set_draw_color(player_color(game.state.current_player));
         canvas.fill_rect(Some(sdl2::rect::Rect::new(0, 0, 24, 24))).unwrap();
 
         canvas.present();
