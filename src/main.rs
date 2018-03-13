@@ -3,6 +3,7 @@ extern crate sdl2;
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::pixels::Color;
+use sdl2::gfx::primitives::DrawRenderer;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 enum Tile {
@@ -215,6 +216,36 @@ fn nearest_board_position(state: &GameState, x: i32, y: i32) -> Option<(i8, i8)>
     }
 }
 
+struct AI {
+    state: GameState,
+}
+
+impl AI {
+    fn new(state: GameState) -> AI {
+        AI {
+            state
+        }
+    }
+
+    fn possible_moves(&self) -> Vec<((i8, i8), (i8, i8))> {
+        let mut result = Vec::new();
+
+        for x in 0..BOARD_WIDTH as i8 {
+            for y in 0..BOARD_HEIGHT as i8 {
+                if self.state.get(x, y) == Tile::Player(self.state.current_player) {
+                    result.extend(self.state.reachable_from(x, y).into_iter().map(|to| ((x, y), to)));
+                }
+            }
+        }
+
+        result
+    }
+
+    fn evaluate_position(&self, depth: isize) -> f32 {
+        0.0
+    }
+}
+
 fn main() {
     let sdl = sdl2::init().unwrap();
     let video = sdl.video().unwrap();
@@ -229,6 +260,7 @@ fn main() {
     let mut mouse_x = 0;
     let mut mouse_y = 0;
     let mut selection = None;
+    let mut display_moves = false;
 
     let mut events = sdl.event_pump().unwrap();
     'mainloop: loop {
@@ -239,6 +271,7 @@ fn main() {
             match event {
                 Event::Quit {..} | Event::KeyDown { keycode: Some(Keycode::Escape), .. } => break 'mainloop,
                 Event::KeyDown { keycode: Some(Keycode::R), .. } => game = Default::default(),
+                Event::KeyDown { keycode: Some(Keycode::M), .. } => display_moves = !display_moves,
                 Event::KeyDown { keycode: Some(Keycode::U), .. } => game.undo(),
                 Event::MouseMotion { x, y, .. } => {
                     mouse_x = x;
@@ -294,6 +327,17 @@ fn main() {
                 canvas.set_draw_color(Color::RGB(0, 0, 0));
                 canvas.draw_rect(sdl2::rect::Rect::new(screen_x-6, screen_y-6, 12, 12)).unwrap();
             }
+        }
+
+        if display_moves {
+            let ai = AI::new(game.state);
+            let moves = ai.possible_moves();
+            canvas.set_draw_color(Color::RGB(0, 0, 0));
+            for &((fx, fy), (tx, ty)) in &moves {
+                canvas.draw_line(board_space_to_screen_space(fx, fy), board_space_to_screen_space(tx, ty)).unwrap();
+            }
+
+            canvas.string(32, 8, &format!("Possible moves: {}", &moves.len()), Color::RGB(0, 0, 0)).unwrap();
         }
 
         canvas.set_draw_color(player_color(game.state.current_player));
