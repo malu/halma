@@ -39,7 +39,7 @@ fn player_color(id: u8) -> Color {
 }
 
 const BOARD_WIDTH: u8 = 13;
-const BOARD_HEIGHT: u8 = 19;
+const BOARD_HEIGHT: u8 = 17;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 struct GameState {
@@ -55,19 +55,15 @@ struct Game {
 
 impl GameState {
     fn is_valid_location(&self, x: i8, y: i8) -> bool {
-        let width = match y {
-            0...5 => y+1,
-            5...10 => 21-y,
-            10...14 => y+1,
-            14...18 => 21-y,
-            _ => 0,
-        };
-
-        if y % 2 == 0 {
-            (6-x).abs() < width/2
-        } else {
-            (6-x).abs() < width/2 && (7-x).abs() < width/2
+        if y < 0 || y >= BOARD_HEIGHT as i8 {
+            return false;
         }
+
+        let (left, right) = [
+            (6, 6), (6, 7), (5, 7), (5, 8), (0, 12), (1, 12), (1, 11), (2, 11), (2, 10), (2, 11), (1, 11), (1, 12), (0, 12), (5, 8), (5, 7), (6, 7), (6, 6)
+        ][y as usize];
+
+        x >= left && x <= right
     }
 
     fn set(&mut self, x: i8, y: i8, tile: Tile) {
@@ -148,9 +144,9 @@ impl Default for GameState {
                 if !state.is_valid_location(x, y) {
                     continue;
                 }
-                if y < 7 && (x-6).abs() < 3 {
+                if y < 5 && (x-6).abs() < 3 {
                     state.set(x, y, Tile::Player(1));
-                } else if y > 13  && (x-6).abs() < 3 {
+                } else if y > 11  && (x-6).abs() < 3 {
                     state.set(x, y, Tile::Player(2));
                 } else {
                     state.set(x, y, Tile::Empty);
