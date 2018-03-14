@@ -47,10 +47,16 @@ struct GameState {
     current_player: u8,
 }
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct Move {
+    from: (i8, i8),
+    to: (i8, i8),
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 struct Game {
     state: GameState,
-    moves: Vec<((i8, i8), (i8, i8))>,
+    moves: Vec<Move>,
 }
 
 impl GameState {
@@ -115,7 +121,7 @@ impl Game {
             panic!("Invalid locations for move_piece");
         }
 
-        self.moves.push(((fx, fy), (tx, ty)));
+        self.moves.push(Move { from: (fx, fy), to: (tx, ty) });
         let from = self.state.get(fx, fy);
         self.state.set(tx, ty, from);
         self.state.set(fx, fy, Tile::Empty);
@@ -123,7 +129,9 @@ impl Game {
     }
 
     fn undo(&mut self) {
-        if let Some(((fx, fy), (tx, ty))) = self.moves.pop() {
+        if let Some(mov) = self.moves.pop() {
+            let (fx, fy) = mov.from;
+            let (tx, ty) = mov.to;
             let from = self.state.get(tx, ty);
             self.state.set(fx, fy, from);
             self.state.set(tx, ty, Tile::Empty);
@@ -223,13 +231,13 @@ impl AI {
         }
     }
 
-    fn possible_moves(&self) -> Vec<((i8, i8), (i8, i8))> {
+    fn possible_moves(&self) -> Vec<Move> {
         let mut result = Vec::new();
 
         for x in 0..BOARD_WIDTH as i8 {
             for y in 0..BOARD_HEIGHT as i8 {
                 if self.state.get(x, y) == Tile::Player(self.state.current_player) {
-                    result.extend(self.state.reachable_from(x, y).into_iter().map(|to| ((x, y), to)));
+                    result.extend(self.state.reachable_from(x, y).into_iter().map(|to| Move { from: (x, y), to } ));
                 }
             }
         }
@@ -329,7 +337,9 @@ fn main() {
             let ai = AI::new(game.state);
             let moves = ai.possible_moves();
             canvas.set_draw_color(Color::RGB(0, 0, 0));
-            for &((fx, fy), (tx, ty)) in &moves {
+            for &mov in &moves {
+                let (fx, fy) = mov.from;
+                let (tx, ty) = mov.to;
                 canvas.draw_line(board_space_to_screen_space(fx, fy), board_space_to_screen_space(tx, ty)).unwrap();
             }
 
