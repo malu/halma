@@ -1,9 +1,14 @@
+extern crate rayon;
 extern crate sdl2;
 
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::pixels::Color;
 use sdl2::gfx::primitives::DrawRenderer;
+
+mod ai;
+
+use ai::AI;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 enum Tile {
@@ -38,17 +43,17 @@ fn player_color(id: u8) -> Color {
     }
 }
 
-const BOARD_WIDTH: u8 = 13;
-const BOARD_HEIGHT: u8 = 17;
+pub const BOARD_WIDTH: u8 = 13;
+pub const BOARD_HEIGHT: u8 = 17;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-struct GameState {
+pub struct GameState {
     board: [[Tile; BOARD_HEIGHT as usize]; BOARD_WIDTH as usize],
     current_player: u8,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-struct Move {
+pub struct Move {
     from: (i8, i8),
     to: (i8, i8),
 }
@@ -113,6 +118,17 @@ impl GameState {
         result.retain(|&pos| pos != (x, y));
         result
     }
+
+    fn move_piece(&mut self, (fx, fy): (i8, i8), (tx, ty): (i8, i8)) {
+        if !self.is_valid_location(fx, fy) || !self.is_valid_location(tx, ty) {
+            panic!("Invalid locations for move_piece");
+        }
+
+        let from = self.get(fx, fy);
+        self.set(tx, ty, from);
+        self.set(fx, fy, Tile::Empty);
+        self.current_player = 3-self.current_player;
+    }
 }
 
 impl Game {
@@ -122,10 +138,7 @@ impl Game {
         }
 
         self.moves.push(Move { from: (fx, fy), to: (tx, ty) });
-        let from = self.state.get(fx, fy);
-        self.state.set(tx, ty, from);
-        self.state.set(fx, fy, Tile::Empty);
-        self.state.current_player = 3-self.state.current_player;
+        self.state.move_piece((fx, fy), (tx, ty));
     }
 
     fn undo(&mut self) {
@@ -220,35 +233,6 @@ fn nearest_board_position(state: &GameState, x: i32, y: i32) -> Option<(i8, i8)>
     }
 }
 
-struct AI {
-    state: GameState,
-}
-
-impl AI {
-    fn new(state: GameState) -> AI {
-        AI {
-            state
-        }
-    }
-
-    fn possible_moves(&self) -> Vec<Move> {
-        let mut result = Vec::new();
-
-        for x in 0..BOARD_WIDTH as i8 {
-            for y in 0..BOARD_HEIGHT as i8 {
-                if self.state.get(x, y) == Tile::Player(self.state.current_player) {
-                    result.extend(self.state.reachable_from(x, y).into_iter().map(|to| Move { from: (x, y), to } ));
-                }
-            }
-        }
-
-        result
-    }
-
-    fn evaluate_position(&self, depth: isize) -> f32 {
-        0.0
-    }
-}
 
 fn main() {
     let sdl = sdl2::init().unwrap();
@@ -277,6 +261,11 @@ fn main() {
                 Event::KeyDown { keycode: Some(Keycode::R), .. } => game = Default::default(),
                 Event::KeyDown { keycode: Some(Keycode::M), .. } => display_moves = !display_moves,
                 Event::KeyDown { keycode: Some(Keycode::U), .. } => game.undo(),
+                Event::KeyDown { keycode: Some(Keycode::A), .. } => {
+                    let ai = AI::new(game.state);
+                    let mov = ai.calculate_move(2);
+                    game.move_piece(mov.from, mov.to);
+                }
                 Event::MouseMotion { x, y, .. } => {
                     mouse_x = x;
                     mouse_y = y;
