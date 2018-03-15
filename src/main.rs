@@ -323,8 +323,7 @@ fn main() {
         }
 
         if display_moves {
-            let ai = AI::new(game.state);
-            let moves = ai.possible_moves();
+            let moves = ai::possible_moves(&game.state);
             canvas.set_draw_color(Color::RGB(0, 0, 0));
             for &mov in &moves {
                 let (fx, fy) = mov.from;

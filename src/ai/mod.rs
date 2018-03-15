@@ -2,6 +2,21 @@ use rayon::prelude::*;
 
 use {BOARD_HEIGHT, BOARD_WIDTH, GameState, Move, Tile};
 
+pub fn possible_moves(state: &GameState) -> Vec<Move> {
+    let mut result = Vec::new();
+
+    for x in 0..BOARD_WIDTH as i8 {
+        for y in 0..BOARD_HEIGHT as i8 {
+            if state.get(x, y) == Tile::Player(state.current_player) {
+                result.extend(state.reachable_from(x, y).into_iter().map(|to| Move { from: (x, y), to } ));
+            }
+        }
+    }
+
+    result
+}
+
+
 pub struct AI {
     state: GameState,
 }
@@ -11,20 +26,6 @@ impl AI {
         AI {
             state
         }
-    }
-
-    pub fn possible_moves(&self) -> Vec<Move> {
-        let mut result = Vec::new();
-
-        for x in 0..BOARD_WIDTH as i8 {
-            for y in 0..BOARD_HEIGHT as i8 {
-                if self.state.get(x, y) == Tile::Player(self.state.current_player) {
-                    result.extend(self.state.reachable_from(x, y).into_iter().map(|to| Move { from: (x, y), to } ));
-                }
-            }
-        }
-
-        result
     }
 
     fn evaluate_position(&self, depth: usize) -> i64 {
@@ -68,7 +69,7 @@ impl AI {
 
             (score*1_000_000.0) as i64
         } else {
-            let moves = self.possible_moves();
+            let moves = possible_moves(&self.state);
             let scores = moves.into_iter().map(|mov| {
                 let mut state = self.state;
                 state.move_piece(mov.from, mov.to);
@@ -83,7 +84,7 @@ impl AI {
     }
 
     pub fn calculate_move(&self, depth: usize) -> Move {
-        let moves = self.possible_moves();
+        let moves = possible_moves(&self.state);
         println!("#moves: {}", moves.len());
         println!("depth: {}", depth);
         let start = ::std::time::Instant::now();
