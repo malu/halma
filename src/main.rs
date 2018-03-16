@@ -119,7 +119,10 @@ impl GameState {
         result
     }
 
-    fn move_piece(&mut self, (fx, fy): (i8, i8), (tx, ty): (i8, i8)) {
+    fn move_piece(&mut self, mov: Move) {
+        let (fx, fy) = mov.from;
+        let (tx, ty) = mov.to;
+
         if !self.is_valid_location(fx, fy) || !self.is_valid_location(tx, ty) {
             panic!("Invalid locations for move_piece");
         }
@@ -132,13 +135,16 @@ impl GameState {
 }
 
 impl Game {
-    fn move_piece(&mut self, (fx, fy): (i8, i8), (tx, ty): (i8, i8)) {
+    fn move_piece(&mut self, mov: Move) {
+        let (fx, fy) = mov.from;
+        let (tx, ty) = mov.to;
+
         if !self.state.is_valid_location(fx, fy) || !self.state.is_valid_location(tx, ty) {
             panic!("Invalid locations for move_piece");
         }
 
-        self.moves.push(Move { from: (fx, fy), to: (tx, ty) });
-        self.state.move_piece((fx, fy), (tx, ty));
+        self.moves.push(mov);
+        self.state.move_piece(mov);
     }
 
     fn undo(&mut self) {
@@ -264,7 +270,7 @@ fn main() {
                 Event::KeyDown { keycode: Some(Keycode::A), .. } => {
                     let ai = AI::new(game.state);
                     let mov = ai.calculate_move(2);
-                    game.move_piece(mov.from, mov.to);
+                    game.move_piece(mov);
                 }
                 Event::MouseMotion { x, y, .. } => {
                     mouse_x = x;
@@ -285,7 +291,7 @@ fn main() {
                         Some((x, y)) => {
                             if let Some((bx, by)) = nearest_board_position(&game.state, mouse_x, mouse_y) {
                                 if game.state.reachable_from(x, y).contains(&(bx, by)) {
-                                    game.move_piece((x, y), (bx, by));
+                                    game.move_piece(Move { from: (x, y), to: (bx, by) });
                                 }
                             }
 

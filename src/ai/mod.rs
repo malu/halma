@@ -72,7 +72,7 @@ impl AI {
             let moves = possible_moves(&self.state);
             let scores = moves.into_iter().map(|mov| {
                 let mut state = self.state;
-                state.move_piece(mov.from, mov.to);
+                state.move_piece(mov);
                 AI::new(state).evaluate_position(depth-1)
             });
             if self.state.current_player == 1 {
@@ -89,15 +89,15 @@ impl AI {
         println!("depth: {}", depth);
         let start = ::std::time::Instant::now();
         let mov = if self.state.current_player == 1 {
-            moves.into_par_iter().max_by_key(|mov| {
+            moves.into_par_iter().max_by_key(|&mov| {
                 let mut state = self.state;
-                state.move_piece(mov.from, mov.to);
+                state.move_piece(mov);
                 AI::new(state).evaluate_position(depth)
             }).unwrap()
         } else {
-            moves.into_par_iter().min_by_key(|mov| {
+            moves.into_par_iter().min_by_key(|&mov| {
                 let mut state = self.state;
-                state.move_piece(mov.from, mov.to);
+                state.move_piece(mov);
                 AI::new(state).evaluate_position(depth)
             }).unwrap()
         };
