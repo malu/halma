@@ -1,4 +1,3 @@
-extern crate rayon;
 extern crate sdl2;
 
 use sdl2::event::Event;
@@ -56,6 +55,15 @@ pub struct GameState {
 pub struct Move {
     from: (i8, i8),
     to: (i8, i8),
+}
+
+impl Move {
+    fn inverse(&self) -> Self {
+        Move {
+            from: self.to,
+            to: self.from,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -268,7 +276,7 @@ fn main() {
                 Event::KeyDown { keycode: Some(Keycode::M), .. } => display_moves = !display_moves,
                 Event::KeyDown { keycode: Some(Keycode::U), .. } => game.undo(),
                 Event::KeyDown { keycode: Some(Keycode::A), .. } => {
-                    let ai = AI::new(game.state);
+                    let mut ai = AI::new(game.state);
                     let mov = ai.calculate_move(2);
                     game.move_piece(mov);
                 }

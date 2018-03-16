@@ -1,5 +1,3 @@
-use rayon::prelude::*;
-
 use {BOARD_HEIGHT, BOARD_WIDTH, GameState, Move, Tile};
 
 pub fn possible_moves(state: &GameState) -> Vec<Move> {
@@ -87,22 +85,24 @@ impl AI {
         (score*1_000_000.0) as i64
     }
 
-    pub fn calculate_move(&self, depth: usize) -> Move {
+    pub fn calculate_move(&mut self, depth: usize) -> Move {
         let moves = possible_moves(&self.state);
         println!("#moves: {}", moves.len());
         println!("depth: {}", depth);
         let start = ::std::time::Instant::now();
         let mov = if self.state.current_player == 1 {
-            moves.into_par_iter().max_by_key(|&mov| {
-                let mut state = self.state;
-                state.move_piece(mov);
-                AI::new(state).search(depth)
+            moves.into_iter().max_by_key(|&mov| {
+                self.state.move_piece(mov);
+                let v = self.search(depth);
+                self.state.move_piece(mov.inverse());
+                v
             }).unwrap()
         } else {
-            moves.into_par_iter().min_by_key(|&mov| {
-                let mut state = self.state;
-                state.move_piece(mov);
-                AI::new(state).search(depth)
+            moves.into_iter().min_by_key(|&mov| {
+                self.state.move_piece(mov);
+                let v = self.search(depth);
+                self.state.move_piece(mov.inverse());
+                v
             }).unwrap()
         };
 
