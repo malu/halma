@@ -1,21 +1,27 @@
+use std::collections::HashMap;
+
 use {BOARD_HEIGHT, BOARD_WIDTH, GameState, Move, Tile};
 
 pub struct AI {
     state: GameState,
+    transpositions: HashMap<GameState, Transposition>,
     visited_nodes: usize,
     visited_leaf_nodes: usize,
     alpha_cutoffs: usize,
     beta_cutoffs: usize,
+    tt_hits: usize,
 }
 
 impl AI {
     pub fn new(state: GameState) -> AI {
         AI {
             state,
+            transpositions: HashMap::new(),
             visited_nodes: 0,
             visited_leaf_nodes: 0,
             alpha_cutoffs: 0,
             beta_cutoffs: 0,
+            tt_hits: 0,
         }
     }
 
@@ -40,11 +46,33 @@ impl AI {
 
     fn search_max(&mut self, alpha: i64, beta: i64, depth: usize) -> i64 {
         self.visited_nodes += 1;
+        let mut alpha = alpha;
+        let mut beta = beta;
+
+        if let Some(transposition) = self.transpositions.get(&self.state) {
+            self.tt_hits += 1;
+            match transposition.evaluation {
+                Evaluation::UpperBound(upper_bound) => {
+                    if upper_bound <= alpha {
+                        return upper_bound;
+                    }
+                    alpha = upper_bound;
+                }
+                Evaluation::LowerBound(lower_bound) => {
+                    if lower_bound >= beta {
+                        return lower_bound;
+                    }
+                    beta = lower_bound;
+                }
+                Evaluation::Exact(_) => {}
+            }
+        }
+
         if depth == 0 {
             return self.evaluate_position();
         }
 
-        let mut alpha = alpha;
+        let mut is_exact = false;
 
         for mov in self.possible_moves() {
             self.state.move_piece(mov);
@@ -53,12 +81,20 @@ impl AI {
 
             if score >= beta {
                 self.beta_cutoffs += 1;
+                self.transpositions.insert(self.state, Transposition { evaluation: Evaluation::LowerBound(beta) });
                 return beta;
             }
 
             if score > alpha {
+                is_exact = true;
                 alpha = score;
             }
+        }
+
+        if is_exact {
+            self.transpositions.insert(self.state, Transposition { evaluation: Evaluation::Exact(alpha) });
+        } else {
+            self.transpositions.insert(self.state, Transposition { evaluation: Evaluation::UpperBound(alpha) });
         }
 
         alpha
@@ -66,11 +102,33 @@ impl AI {
 
     fn search_min(&mut self, alpha: i64, beta: i64, depth: usize) -> i64 {
         self.visited_nodes += 1;
+        let mut alpha = alpha;
+        let mut beta = beta;
+
+        if let Some(transposition) = self.transpositions.get(&self.state) {
+            self.tt_hits += 1;
+            match transposition.evaluation {
+                Evaluation::UpperBound(upper_bound) => {
+                    if beta <= upper_bound {
+                        return upper_bound;
+                    }
+                    beta = upper_bound;
+                }
+                Evaluation::LowerBound(lower_bound) => {
+                    if alpha >= lower_bound {
+                        return lower_bound;
+                    }
+                    alpha = lower_bound;
+                }
+                Evaluation::Exact(_) => {}
+            }
+        }
+
         if depth == 0 {
             return -self.evaluate_position();
         }
 
-        let mut beta = beta;
+        let mut is_exact = false;
 
         for mov in self.possible_moves() {
             self.state.move_piece(mov);
@@ -79,12 +137,20 @@ impl AI {
 
             if score <= alpha {
                 self.alpha_cutoffs += 1;
+                self.transpositions.insert(self.state, Transposition { evaluation: Evaluation::UpperBound(alpha) });
                 return alpha;
             }
 
             if score < beta {
+                is_exact = true;
                 beta = score;
             }
+        }
+
+        if is_exact {
+            self.transpositions.insert(self.state, Transposition { evaluation: Evaluation::Exact(beta) });
+        } else {
+            self.transpositions.insert(self.state, Transposition { evaluation: Evaluation::LowerBound(beta) });
         }
 
         beta
@@ -156,11 +222,23 @@ impl AI {
         println!("V. leaf nodes: {}", self.visited_leaf_nodes);
         println!("alpha cutoffs: {}", self.alpha_cutoffs);
         println!("beta cutoffs:  {}", self.beta_cutoffs);
+        println!("TT hits:       {}", self.tt_hits);
+        println!("TT size:       {}", self.transpositions.len());
         let secs = elapsed.as_secs();
         println!("Time: {}:{}", secs / 60, (secs % 60) as f64 + elapsed.subsec_nanos() as f64 / 1_000_000_000.0);
         println!("");
 
         mov
     }
+}
+
+enum Evaluation {
+    Exact(i64),
+    LowerBound(i64),
+    UpperBound(i64)
+}
+
+struct Transposition {
+    evaluation: Evaluation,
 }
 

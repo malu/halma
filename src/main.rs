@@ -9,7 +9,7 @@ mod ai;
 
 use ai::AI;
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
 enum Tile {
     Empty,
     Invalid,
@@ -45,7 +45,7 @@ fn player_color(id: u8) -> Color {
 pub const BOARD_WIDTH: u8 = 13;
 pub const BOARD_HEIGHT: u8 = 17;
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
 pub struct GameState {
     board: [[Tile; BOARD_HEIGHT as usize]; BOARD_WIDTH as usize],
     current_player: u8,
