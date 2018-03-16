@@ -19,6 +19,8 @@ pub struct AI {
     state: GameState,
     visited_nodes: usize,
     visited_leaf_nodes: usize,
+    alpha_cutoffs: usize,
+    beta_cutoffs: usize,
 }
 
 impl AI {
@@ -27,29 +29,61 @@ impl AI {
             state,
             visited_nodes: 0,
             visited_leaf_nodes: 0,
+            alpha_cutoffs: 0,
+            beta_cutoffs: 0,
         }
     }
 
-    fn search(&mut self, depth: usize) -> i64 {
+    fn search_max(&mut self, alpha: i64, beta: i64, depth: usize) -> i64 {
         self.visited_nodes += 1;
         if depth == 0 {
             return self.evaluate_position();
         }
 
-        let current_player = self.state.current_player;
-        let moves = possible_moves(&self.state);
-        let scores = moves.into_iter().map(|mov| {
-            self.state.move_piece(mov);
-            let v = self.search(depth-1);
-            self.state.move_piece(mov.inverse());
-            v
-        });
+        let mut alpha = alpha;
 
-        if current_player == 1 {
-            scores.max().unwrap()
-        } else {
-            scores.min().unwrap()
+        for mov in possible_moves(&self.state) {
+            self.state.move_piece(mov);
+            let score = self.search_min(alpha, beta, depth-1);
+            self.state.move_piece(mov.inverse());
+
+            if score >= beta {
+                self.beta_cutoffs += 1;
+                return beta;
+            }
+
+            if score > alpha {
+                alpha = score;
+            }
         }
+
+        alpha
+    }
+
+    fn search_min(&mut self, alpha: i64, beta: i64, depth: usize) -> i64 {
+        self.visited_nodes += 1;
+        if depth == 0 {
+            return -self.evaluate_position();
+        }
+
+        let mut beta = beta;
+
+        for mov in possible_moves(&self.state) {
+            self.state.move_piece(mov);
+            let score = self.search_max(alpha, beta, depth-1);
+            self.state.move_piece(mov.inverse());
+
+            if score <= alpha {
+                self.alpha_cutoffs += 1;
+                return alpha;
+            }
+
+            if score < beta {
+                beta = score;
+            }
+        }
+
+        beta
     }
 
     fn evaluate_position(&mut self) -> i64 {
@@ -98,27 +132,22 @@ impl AI {
     pub fn calculate_move(&mut self, depth: usize) -> Move {
         let moves = possible_moves(&self.state);
         println!("Search depth:  {}", depth);
+        let alpha = i64::min_value();
+        let beta = i64::max_value();
         let start = ::std::time::Instant::now();
-        let mov = if self.state.current_player == 1 {
-            moves.into_iter().max_by_key(|&mov| {
-                self.state.move_piece(mov);
-                let v = self.search(depth);
-                self.state.move_piece(mov.inverse());
-                v
-            }).unwrap()
-        } else {
-            moves.into_iter().min_by_key(|&mov| {
-                self.state.move_piece(mov);
-                let v = self.search(depth);
-                self.state.move_piece(mov.inverse());
-                v
-            }).unwrap()
-        };
+        let mov = moves.into_iter().max_by_key(|&mov| {
+            self.state.move_piece(mov);
+            let v = self.search_min(alpha, beta, depth);
+            self.state.move_piece(mov.inverse());
+            v
+        }).unwrap();
 
         let end = ::std::time::Instant::now();
         let elapsed = end-start;
         println!("Visited nodes: {}", self.visited_nodes);
         println!("V. leaf nodes: {}", self.visited_leaf_nodes);
+        println!("alpha cutoffs: {}", self.alpha_cutoffs);
+        println!("beta cutoffs:  {}", self.beta_cutoffs);
         let secs = elapsed.as_secs();
         println!("Time: {}:{}", secs / 60, (secs % 60) as f64 + elapsed.subsec_nanos() as f64 / 1_000_000_000.0);
         println!("");
