@@ -11,6 +11,7 @@ pub fn possible_moves(state: &GameState) -> Vec<Move> {
         }
     }
 
+    result.sort_by_key(|&Move { from: (_, y), to: (_, y2) }| -(y2-y).abs());
     result
 }
 
