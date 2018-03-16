@@ -17,34 +17,44 @@ pub fn possible_moves(state: &GameState) -> Vec<Move> {
 
 pub struct AI {
     state: GameState,
+    visited_nodes: usize,
+    visited_leaf_nodes: usize,
 }
 
 impl AI {
     pub fn new(state: GameState) -> AI {
         AI {
-            state
+            state,
+            visited_nodes: 0,
+            visited_leaf_nodes: 0,
         }
     }
 
-    fn search(&self, depth: usize) -> i64 {
+    fn search(&mut self, depth: usize) -> i64 {
+        self.visited_nodes += 1;
         if depth == 0 {
             return self.evaluate_position();
         }
 
+        let current_player = self.state.current_player;
         let moves = possible_moves(&self.state);
         let scores = moves.into_iter().map(|mov| {
-            let mut state = self.state;
-            state.move_piece(mov);
-            AI::new(state).search(depth-1)
+            self.state.move_piece(mov);
+            let v = self.search(depth-1);
+            self.state.move_piece(mov.inverse());
+            v
         });
-        if self.state.current_player == 1 {
+
+        if current_player == 1 {
             scores.max().unwrap()
         } else {
             scores.min().unwrap()
         }
     }
 
-    fn evaluate_position(&self) -> i64 {
+    fn evaluate_position(&mut self) -> i64 {
+        self.visited_leaf_nodes += 1;
+
         let mut score = 0.0;
         let score_dist_last_piece = {
             let mut p1_dist = 0;
@@ -87,8 +97,7 @@ impl AI {
 
     pub fn calculate_move(&mut self, depth: usize) -> Move {
         let moves = possible_moves(&self.state);
-        println!("#moves: {}", moves.len());
-        println!("depth: {}", depth);
+        println!("Search depth:  {}", depth);
         let start = ::std::time::Instant::now();
         let mov = if self.state.current_player == 1 {
             moves.into_iter().max_by_key(|&mov| {
@@ -108,7 +117,11 @@ impl AI {
 
         let end = ::std::time::Instant::now();
         let elapsed = end-start;
-        println!("Took {} s", elapsed.as_secs() as f64 + elapsed.subsec_nanos() as f64 / 1_000_000_000.0);
+        println!("Visited nodes: {}", self.visited_nodes);
+        println!("V. leaf nodes: {}", self.visited_leaf_nodes);
+        let secs = elapsed.as_secs();
+        println!("Time: {}:{}", secs / 60, (secs % 60) as f64 + elapsed.subsec_nanos() as f64 / 1_000_000_000.0);
+        println!("");
 
         mov
     }
