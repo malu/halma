@@ -1,21 +1,5 @@
 use {BOARD_HEIGHT, BOARD_WIDTH, GameState, Move, Tile};
 
-pub fn possible_moves(state: &GameState) -> Vec<Move> {
-    let mut result = Vec::new();
-
-    for x in 0..BOARD_WIDTH as i8 {
-        for y in 0..BOARD_HEIGHT as i8 {
-            if state.get(x, y) == Tile::Player(state.current_player) {
-                result.extend(state.reachable_from(x, y).into_iter().map(|to| Move { from: (x, y), to } ));
-            }
-        }
-    }
-
-    result.sort_by_key(|&Move { from: (_, y), to: (_, y2) }| -(y2-y).abs());
-    result
-}
-
-
 pub struct AI {
     state: GameState,
     visited_nodes: usize,
@@ -35,6 +19,25 @@ impl AI {
         }
     }
 
+    pub fn possible_moves(&self) -> Vec<Move> {
+        let mut result = Vec::new();
+
+        for x in 0..BOARD_WIDTH as i8 {
+            for y in 0..BOARD_HEIGHT as i8 {
+                if self.state.get(x, y) == Tile::Player(self.state.current_player) {
+                    result.extend(self.state.reachable_from(x, y).into_iter().map(|to| Move { from: (x, y), to } ));
+                }
+            }
+        }
+
+        if self.state.current_player == 1 {
+            result.sort_by_key(|&Move { from: (_, y), to: (_, y2) }| y-y2);
+        } else {
+            result.sort_by_key(|&Move { from: (_, y), to: (_, y2) }| y2-y);
+        }
+        result
+    }
+
     fn search_max(&mut self, alpha: i64, beta: i64, depth: usize) -> i64 {
         self.visited_nodes += 1;
         if depth == 0 {
@@ -43,7 +46,7 @@ impl AI {
 
         let mut alpha = alpha;
 
-        for mov in possible_moves(&self.state) {
+        for mov in self.possible_moves() {
             self.state.move_piece(mov);
             let score = self.search_min(alpha, beta, depth-1);
             self.state.move_piece(mov.inverse());
@@ -69,7 +72,7 @@ impl AI {
 
         let mut beta = beta;
 
-        for mov in possible_moves(&self.state) {
+        for mov in self.possible_moves() {
             self.state.move_piece(mov);
             let score = self.search_max(alpha, beta, depth-1);
             self.state.move_piece(mov.inverse());
@@ -135,7 +138,7 @@ impl AI {
     }
 
     pub fn calculate_move(&mut self, depth: usize) -> Move {
-        let moves = possible_moves(&self.state);
+        let moves = self.possible_moves();
         println!("Search depth:  {}", depth);
         let alpha = i64::min_value();
         let beta = i64::max_value();
@@ -160,3 +163,4 @@ impl AI {
         mov
     }
 }
+
