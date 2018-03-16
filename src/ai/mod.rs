@@ -126,7 +126,11 @@ impl AI {
         };
         score += score_dist_avg_piece;
 
-        (score*1_000_000.0) as i64
+        if self.state.current_player == 1 {
+            (score*1_000_000.0) as i64
+        } else {
+            (-score*1_000_000.0) as i64
+        }
     }
 
     pub fn calculate_move(&mut self, depth: usize) -> Move {
