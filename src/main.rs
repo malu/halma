@@ -277,7 +277,7 @@ fn main() {
                 Event::KeyDown { keycode: Some(Keycode::U), .. } => game.undo(),
                 Event::KeyDown { keycode: Some(Keycode::A), .. } => {
                     let mut ai = AI::new(game.state);
-                    let mov = ai.calculate_move(3);
+                    let mov = ai.calculate_move(4);
                     game.move_piece(mov);
                 }
                 Event::MouseMotion { x, y, .. } => {
