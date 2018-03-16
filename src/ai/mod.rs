@@ -10,6 +10,7 @@ pub struct AI {
     alpha_cutoffs: usize,
     beta_cutoffs: usize,
     tt_hits: usize,
+    tt_cutoffs: usize,
 }
 
 impl AI {
@@ -22,6 +23,7 @@ impl AI {
             alpha_cutoffs: 0,
             beta_cutoffs: 0,
             tt_hits: 0,
+            tt_cutoffs: 0,
         }
     }
 
@@ -54,12 +56,14 @@ impl AI {
             match transposition.evaluation {
                 Evaluation::UpperBound(upper_bound) => {
                     if upper_bound <= alpha {
+                        self.tt_cutoffs += 1;
                         return upper_bound;
                     }
                     alpha = upper_bound;
                 }
                 Evaluation::LowerBound(lower_bound) => {
                     if lower_bound >= beta {
+                        self.tt_cutoffs += 1;
                         return lower_bound;
                     }
                     beta = lower_bound;
@@ -110,12 +114,14 @@ impl AI {
             match transposition.evaluation {
                 Evaluation::UpperBound(upper_bound) => {
                     if beta <= upper_bound {
+                        self.tt_cutoffs += 1;
                         return upper_bound;
                     }
                     beta = upper_bound;
                 }
                 Evaluation::LowerBound(lower_bound) => {
                     if alpha >= lower_bound {
+                        self.tt_cutoffs += 1;
                         return lower_bound;
                     }
                     alpha = lower_bound;
@@ -204,17 +210,20 @@ impl AI {
     }
 
     pub fn calculate_move(&mut self, depth: usize) -> Move {
-        let moves = self.possible_moves();
         println!("Search depth:  {}", depth);
-        let alpha = i64::min_value();
-        let beta = i64::max_value();
         let start = ::std::time::Instant::now();
-        let mov = moves.into_iter().max_by_key(|&mov| {
-            self.state.move_piece(mov);
-            let v = self.search_min(alpha, beta, depth);
-            self.state.move_piece(mov.inverse());
-            v
-        }).unwrap();
+        let mut moves = self.possible_moves();
+        for d in 0..depth {
+            let alpha = i64::min_value();
+            let beta = i64::max_value();
+
+            moves.sort_by_key(|&mov| {
+                self.state.move_piece(mov);
+                let v = self.search_min(alpha, beta, d);
+                self.state.move_piece(mov.inverse());
+                -v
+            });
+        }
 
         let end = ::std::time::Instant::now();
         let elapsed = end-start;
@@ -223,12 +232,13 @@ impl AI {
         println!("alpha cutoffs: {}", self.alpha_cutoffs);
         println!("beta cutoffs:  {}", self.beta_cutoffs);
         println!("TT hits:       {}", self.tt_hits);
+        println!("TT cutoffs:    {}", self.tt_cutoffs);
         println!("TT size:       {}", self.transpositions.len());
         let secs = elapsed.as_secs();
         println!("Time: {}:{}", secs / 60, (secs % 60) as f64 + elapsed.subsec_nanos() as f64 / 1_000_000_000.0);
         println!("");
 
-        mov
+        moves[0]
     }
 }
 
