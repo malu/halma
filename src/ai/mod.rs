@@ -259,9 +259,18 @@ impl AI {
     }
 
     pub fn calculate_move(&mut self, depth: usize) -> Move {
+        // reset statistics
+        self.visited_nodes = 0;
+        self.visited_leaf_nodes = 0;
+        self.alpha_cutoffs = 0;
+        self.beta_cutoffs = 0;
+        self.tt_hits = 0;
+        self.tt_cutoffs = 0;
+
         println!("Search depth:  {}", depth);
         let start = ::std::time::Instant::now();
         let mut moves = self.possible_moves();
+        let mut score = i64::min_value();
         for d in 0..depth {
             let alpha = i64::min_value();
             let beta = i64::max_value();
@@ -270,21 +279,26 @@ impl AI {
                 self.state.move_piece(mov);
                 let v = self.search_min(alpha, beta, d);
                 self.state.move_piece(mov.inverse());
+                score = ::std::cmp::max(v, score);
                 -v
             });
         }
 
         let end = ::std::time::Instant::now();
         let elapsed = end-start;
-        println!("Visited nodes: {}", self.visited_nodes);
-        println!("V. leaf nodes: {}", self.visited_leaf_nodes);
-        println!("alpha cutoffs: {}", self.alpha_cutoffs);
-        println!("beta cutoffs:  {}", self.beta_cutoffs);
-        println!("TT hits:       {}", self.tt_hits);
-        println!("TT cutoffs:    {}", self.tt_cutoffs);
-        println!("TT size:       {}", self.transpositions.len());
-        let secs = elapsed.as_secs();
-        println!("Time: {}:{}", secs / 60, (secs % 60) as f64 + elapsed.subsec_nanos() as f64 / 1_000_000_000.0);
+        let secs = elapsed.as_secs() as f64 + elapsed.subsec_nanos() as f64 / 1_000_000_000.0;
+        println!("  nodes | total   {} ({:.3} nodes/s)", self.visited_nodes, self.visited_nodes as f64 / secs);
+        println!("        | leaf    {} ({:.2}%)", self.visited_leaf_nodes, 100.0 * self.visited_leaf_nodes as f64 / self.visited_nodes as f64);
+        println!("cutoffs | alpha   {} ({:.2}%)", self.alpha_cutoffs, 100.0 * self.alpha_cutoffs as f64 / self.visited_nodes as f64);
+        println!("        | beta    {} ({:.2}%)", self.beta_cutoffs, 100.0 * self.beta_cutoffs as f64 / self.visited_nodes as f64);
+        let tt_lookups = self.visited_nodes;
+        println!("     TT | lookups {}", tt_lookups);
+        println!("        | hits    {} ({:.2}%)", self.tt_hits, 100.0 * self.tt_hits as f64 / tt_lookups as f64);
+        println!("        | cutoffs {} ({:.2}%)", self.tt_cutoffs, 100.0 * self.tt_cutoffs as f64 / tt_lookups as f64);
+        println!("        | size    {}", self.transpositions.len());
+        println!("");
+        println!("Time:  {}:{}", elapsed.as_secs() / 60, (elapsed.as_secs() % 60) as f64 + elapsed.subsec_nanos() as f64 / 1_000_000_000.0);
+        println!("Score: {}", score);
         println!("");
 
         moves[0]
