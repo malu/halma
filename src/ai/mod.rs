@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use {BOARD_HEIGHT, BOARD_WIDTH, GameState, Move, Tile};
 
 pub struct AI {
-    state: GameState,
+    pub state: GameState,
     transpositions: HashMap<GameState, Transposition>,
     visited_nodes: usize,
     visited_leaf_nodes: usize,

@@ -264,6 +264,8 @@ fn main() {
     let mut selection = None;
     let mut display_moves = false;
 
+    let mut ai1 = AI::new(game.state);
+    let mut ai2 = AI::new(game.state);
     let mut events = sdl.event_pump().unwrap();
     'mainloop: loop {
         canvas.set_draw_color(Color::RGB(224, 224, 224));
@@ -276,8 +278,15 @@ fn main() {
                 Event::KeyDown { keycode: Some(Keycode::M), .. } => display_moves = !display_moves,
                 Event::KeyDown { keycode: Some(Keycode::U), .. } => game.undo(),
                 Event::KeyDown { keycode: Some(Keycode::A), .. } => {
-                    let mut ai = AI::new(game.state);
-                    let mov = ai.calculate_move(4);
+                    let depth = 10;
+                    let mov;
+                    if game.state.current_player == 1 {
+                        ai1.state = game.state;
+                        mov = ai1.calculate_move(depth);
+                    } else {
+                        ai2.state = game.state;
+                        mov = ai2.calculate_move(depth);
+                    }
                     game.move_piece(mov);
                 }
                 Event::MouseMotion { x, y, .. } => {
