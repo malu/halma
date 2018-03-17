@@ -51,6 +51,8 @@ impl AI {
         let mut alpha = alpha;
         let mut beta = beta;
 
+        let mut best_tt_move = None;
+
         if let Some(transposition) = self.transpositions.get(&self.state) {
             self.tt_hits += 1;
             match transposition.evaluation {
@@ -70,6 +72,8 @@ impl AI {
                 }
                 Evaluation::Exact(_) => {}
             }
+
+            best_tt_move = Some(transposition.best_move);
         }
 
         if depth == 0 {
@@ -77,28 +81,49 @@ impl AI {
         }
 
         let mut is_exact = false;
+        let moves = self.possible_moves();
+        let mut best_move = moves[0];
 
-        for mov in self.possible_moves() {
+        if let Some(mov) = best_tt_move {
+            self.state.move_piece(mov);
+            let best_tt_move_score = self.search_min(alpha, beta, depth-1);
+            self.state.move_piece(mov.inverse());
+
+            if best_tt_move_score >= beta {
+                self.tt_cutoffs += 1;
+                self.transpositions.insert(self.state, Transposition { evaluation: Evaluation::LowerBound(beta), best_move: mov });
+                return beta;
+            }
+
+            if best_tt_move_score > alpha {
+                is_exact = true;
+                best_move = mov;
+                alpha = best_tt_move_score;
+            }
+        }
+
+        for mov in moves {
             self.state.move_piece(mov);
             let score = self.search_min(alpha, beta, depth-1);
             self.state.move_piece(mov.inverse());
 
             if score >= beta {
                 self.beta_cutoffs += 1;
-                self.transpositions.insert(self.state, Transposition { evaluation: Evaluation::LowerBound(beta) });
+                self.transpositions.insert(self.state, Transposition { evaluation: Evaluation::LowerBound(beta), best_move: mov });
                 return beta;
             }
 
             if score > alpha {
                 is_exact = true;
+                best_move = mov;
                 alpha = score;
             }
         }
 
         if is_exact {
-            self.transpositions.insert(self.state, Transposition { evaluation: Evaluation::Exact(alpha) });
+            self.transpositions.insert(self.state, Transposition { evaluation: Evaluation::Exact(alpha), best_move });
         } else {
-            self.transpositions.insert(self.state, Transposition { evaluation: Evaluation::UpperBound(alpha) });
+            self.transpositions.insert(self.state, Transposition { evaluation: Evaluation::UpperBound(alpha), best_move });
         }
 
         alpha
@@ -108,6 +133,7 @@ impl AI {
         self.visited_nodes += 1;
         let mut alpha = alpha;
         let mut beta = beta;
+        let mut best_tt_move = None;
 
         if let Some(transposition) = self.transpositions.get(&self.state) {
             self.tt_hits += 1;
@@ -128,35 +154,58 @@ impl AI {
                 }
                 Evaluation::Exact(_) => {}
             }
+
+            best_tt_move = Some(transposition.best_move);
         }
 
         if depth == 0 {
             return -self.evaluate_position();
         }
 
+        let moves = self.possible_moves();
+        let mut best_move = moves[0];
         let mut is_exact = false;
 
-        for mov in self.possible_moves() {
+        if let Some(mov) = best_tt_move {
+            self.state.move_piece(mov);
+            let best_tt_move_score = self.search_max(alpha, beta, depth-1);
+            self.state.move_piece(mov.inverse());
+
+            if best_tt_move_score <= alpha {
+                self.tt_cutoffs += 1;
+                self.transpositions.insert(self.state, Transposition { evaluation: Evaluation::UpperBound(alpha), best_move: mov });
+                return alpha;
+            }
+
+            if best_tt_move_score < beta {
+                is_exact = true;
+                best_move = mov;
+                beta = best_tt_move_score;
+            }
+        }
+
+        for mov in moves {
             self.state.move_piece(mov);
             let score = self.search_max(alpha, beta, depth-1);
             self.state.move_piece(mov.inverse());
 
             if score <= alpha {
                 self.alpha_cutoffs += 1;
-                self.transpositions.insert(self.state, Transposition { evaluation: Evaluation::UpperBound(alpha) });
+                self.transpositions.insert(self.state, Transposition { evaluation: Evaluation::UpperBound(alpha), best_move: mov });
                 return alpha;
             }
 
             if score < beta {
                 is_exact = true;
+                best_move = mov;
                 beta = score;
             }
         }
 
         if is_exact {
-            self.transpositions.insert(self.state, Transposition { evaluation: Evaluation::Exact(beta) });
+            self.transpositions.insert(self.state, Transposition { evaluation: Evaluation::Exact(beta), best_move });
         } else {
-            self.transpositions.insert(self.state, Transposition { evaluation: Evaluation::LowerBound(beta) });
+            self.transpositions.insert(self.state, Transposition { evaluation: Evaluation::LowerBound(beta), best_move });
         }
 
         beta
@@ -250,5 +299,6 @@ enum Evaluation {
 
 struct Transposition {
     evaluation: Evaluation,
+    best_move: Move,
 }
 
