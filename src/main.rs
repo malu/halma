@@ -349,6 +349,16 @@ fn main() {
             canvas.string(32, 8, &format!("Possible moves: {}", &moves.len()), Color::RGB(0, 0, 0)).unwrap();
         }
 
+        if game.moves.len() > 0 {
+            canvas.set_draw_color(Color::RGB(168, 168, 168));
+            let (fx, fy) = game.moves.last().unwrap().from;
+            let (tx, ty) = game.moves.last().unwrap().to;
+            let (screen_fx, screen_fy) = board_space_to_screen_space(fx, fy);
+            let (screen_tx, screen_ty) = board_space_to_screen_space(tx, ty);
+            canvas.draw_rect(sdl2::rect::Rect::new(screen_fx-8, screen_fy-8, 16, 16)).unwrap();
+            canvas.draw_rect(sdl2::rect::Rect::new(screen_tx-8, screen_ty-8, 16, 16)).unwrap();
+        }
+
         canvas.set_draw_color(player_color(game.state.current_player));
         canvas.fill_rect(Some(sdl2::rect::Rect::new(0, 0, 24, 24))).unwrap();
 
