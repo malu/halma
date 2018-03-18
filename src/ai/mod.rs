@@ -239,22 +239,28 @@ impl AI {
 
             for x in 0..BOARD_WIDTH as i8 {
                 for y in 0..BOARD_HEIGHT as i8 {
+                    let xdiff = if y % 2 == 0 {
+                        (x-6).abs() as i64
+                    } else {
+                        ::std::cmp::min((x-6).abs(), (x-7).abs()) as i64
+                    };
+
                     if self.state.get(x, y) == Tile::Player(1) {
-                        p1_total_dist += BOARD_HEIGHT as i64 - 1 - y as i64;
+                        p1_total_dist += 2*(BOARD_HEIGHT as i64 - 1 - y as i64) + xdiff;
                     } else if self.state.get(x, y) == Tile::Player(2) {
-                        p2_total_dist += y as i64;
+                        p2_total_dist += 2*(y as i64) + xdiff;
                     }
                 }
             }
 
-            (p2_total_dist-p1_total_dist) as f32 / 15.0
+            (p2_total_dist-p1_total_dist) as f32 / 2.0 / 15.0
         };
         score += score_dist_avg_piece;
 
         if self.state.current_player == 1 {
-            (score*1_000_000.0) as i64
+            (score*1_000.0) as i64
         } else {
-            (-score*1_000_000.0) as i64
+            (-score*1_000.0) as i64
         }
     }
 
