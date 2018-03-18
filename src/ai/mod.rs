@@ -11,6 +11,7 @@ pub struct AI {
     beta_cutoffs: usize,
     tt_hits: usize,
     tt_cutoffs: usize,
+    moves_explored: [usize; 8],
 }
 
 impl AI {
@@ -24,6 +25,7 @@ impl AI {
             beta_cutoffs: 0,
             tt_hits: 0,
             tt_cutoffs: 0,
+            moves_explored: [0; 8],
         }
     }
 
@@ -48,6 +50,7 @@ impl AI {
 
     fn search_max(&mut self, alpha: i64, beta: i64, depth: usize) -> i64 {
         self.visited_nodes += 1;
+        let mut moves_explored = 0;
         let mut alpha = alpha;
         let mut beta = beta;
 
@@ -88,10 +91,12 @@ impl AI {
             self.state.move_piece(mov);
             let best_tt_move_score = self.search_min(alpha, beta, depth-1);
             self.state.move_piece(mov.inverse());
+            moves_explored += 1;
 
             if best_tt_move_score >= beta {
                 self.tt_cutoffs += 1;
                 self.transpositions.insert(self.state, Transposition { evaluation: Evaluation::LowerBound(beta), best_move: mov });
+                self.moves_explored[::std::cmp::min(7, moves_explored)] += 1;
                 return beta;
             }
 
@@ -106,10 +111,12 @@ impl AI {
             self.state.move_piece(mov);
             let score = self.search_min(alpha, beta, depth-1);
             self.state.move_piece(mov.inverse());
+            moves_explored += 1;
 
             if score >= beta {
                 self.beta_cutoffs += 1;
                 self.transpositions.insert(self.state, Transposition { evaluation: Evaluation::LowerBound(beta), best_move: mov });
+                self.moves_explored[::std::cmp::min(7, moves_explored)] += 1;
                 return beta;
             }
 
@@ -126,11 +133,13 @@ impl AI {
             self.transpositions.insert(self.state, Transposition { evaluation: Evaluation::UpperBound(alpha), best_move });
         }
 
+        self.moves_explored[::std::cmp::min(7, moves_explored)] += 1;
         alpha
     }
 
     fn search_min(&mut self, alpha: i64, beta: i64, depth: usize) -> i64 {
         self.visited_nodes += 1;
+        let mut moves_explored = 0;
         let mut alpha = alpha;
         let mut beta = beta;
         let mut best_tt_move = None;
@@ -141,6 +150,7 @@ impl AI {
                 Evaluation::UpperBound(upper_bound) => {
                     if beta <= upper_bound {
                         self.tt_cutoffs += 1;
+                        self.moves_explored[::std::cmp::min(7, moves_explored)] += 1;
                         return upper_bound;
                     }
                     beta = upper_bound;
@@ -148,6 +158,7 @@ impl AI {
                 Evaluation::LowerBound(lower_bound) => {
                     if alpha >= lower_bound {
                         self.tt_cutoffs += 1;
+                        self.moves_explored[::std::cmp::min(7, moves_explored)] += 1;
                         return lower_bound;
                     }
                     alpha = lower_bound;
@@ -170,10 +181,12 @@ impl AI {
             self.state.move_piece(mov);
             let best_tt_move_score = self.search_max(alpha, beta, depth-1);
             self.state.move_piece(mov.inverse());
+            moves_explored += 1;
 
             if best_tt_move_score <= alpha {
                 self.tt_cutoffs += 1;
                 self.transpositions.insert(self.state, Transposition { evaluation: Evaluation::UpperBound(alpha), best_move: mov });
+                self.moves_explored[::std::cmp::min(7, moves_explored)] += 1;
                 return alpha;
             }
 
@@ -188,10 +201,12 @@ impl AI {
             self.state.move_piece(mov);
             let score = self.search_max(alpha, beta, depth-1);
             self.state.move_piece(mov.inverse());
+            moves_explored += 1;
 
             if score <= alpha {
                 self.alpha_cutoffs += 1;
                 self.transpositions.insert(self.state, Transposition { evaluation: Evaluation::UpperBound(alpha), best_move: mov });
+                self.moves_explored[::std::cmp::min(7, moves_explored)] += 1;
                 return alpha;
             }
 
@@ -208,6 +223,7 @@ impl AI {
             self.transpositions.insert(self.state, Transposition { evaluation: Evaluation::LowerBound(beta), best_move });
         }
 
+        self.moves_explored[::std::cmp::min(7, moves_explored)] += 1;
         beta
     }
 
@@ -272,6 +288,7 @@ impl AI {
         self.beta_cutoffs = 0;
         self.tt_hits = 0;
         self.tt_cutoffs = 0;
+        self.moves_explored = [0; 8];
 
         println!("Search depth:  {}", depth);
         let start = ::std::time::Instant::now();
@@ -302,6 +319,15 @@ impl AI {
         println!("        | hits    {} ({:.2}%)", self.tt_hits, 100.0 * self.tt_hits as f64 / tt_lookups as f64);
         println!("        | cutoffs {} ({:.2}%)", self.tt_cutoffs, 100.0 * self.tt_cutoffs as f64 / tt_lookups as f64);
         println!("        | size    {}", self.transpositions.len());
+        let total_moves_explored = self.moves_explored.iter().sum::<usize>() as f64;
+        println!("  expl. | 0:  {} ({:.3}%)", self.moves_explored[0], 100.0 * self.moves_explored[0] as f64 / total_moves_explored);
+        println!("        | 1:  {} ({:.3}%)", self.moves_explored[1], 100.0 * self.moves_explored[1] as f64 / total_moves_explored);
+        println!("        | 2:  {} ({:.3}%)", self.moves_explored[2], 100.0 * self.moves_explored[2] as f64 / total_moves_explored);
+        println!("        | 3:  {} ({:.3}%)", self.moves_explored[3], 100.0 * self.moves_explored[3] as f64 / total_moves_explored);
+        println!("        | 4:  {} ({:.3}%)", self.moves_explored[4], 100.0 * self.moves_explored[4] as f64 / total_moves_explored);
+        println!("        | 5:  {} ({:.3}%)", self.moves_explored[5], 100.0 * self.moves_explored[5] as f64 / total_moves_explored);
+        println!("        | 6:  {} ({:.3}%)", self.moves_explored[6], 100.0 * self.moves_explored[6] as f64 / total_moves_explored);
+        println!("        | 7+: {} ({:.3}%)", self.moves_explored[7], 100.0 * self.moves_explored[7] as f64 / total_moves_explored);
         println!("");
         println!("Time:  {}:{}", elapsed.as_secs() / 60, (elapsed.as_secs() % 60) as f64 + elapsed.subsec_nanos() as f64 / 1_000_000_000.0);
         println!("Score: {}", score);
