@@ -81,6 +81,7 @@ impl AI {
         }
 
         let mut moves = self.possible_moves();
+        let num_moves = moves.len();
 
         if self.state.current_player == 1 {
             moves.sort_by_key(|&Move { from: (_, y), to: (_, y2) }| y-y2);
@@ -88,7 +89,36 @@ impl AI {
             moves.sort_by_key(|&Move { from: (_, y), to: (_, y2) }| y2-y);
         }
 
-        for mov in moves {
+        let current_player = self.state.current_player;
+        let score_move_order = |mov: Move| -> isize {
+            if current_player == 1 {
+                mov.to.1 as isize - mov.from.1 as isize
+            } else {
+                mov.from.1 as isize - mov.to.1 as isize
+            }
+        };
+
+        for i in 0..num_moves {
+            // Sort the moves using insertion sort.
+            // Only sort the first 8 moves. If we cannot get a cutoff by then, we probably will not
+            // get a cutoff at all.
+            if moves_explored < 8 {
+                let mut max_i = i;
+                let mut max_move_score = score_move_order(moves[max_i]);
+
+                for j in i+1..num_moves {
+                    let move_score = score_move_order(moves[j]);
+                    if move_score > max_move_score {
+                        max_i = j;
+                        max_move_score = move_score;
+                    }
+                }
+
+                moves.swap(i, max_i);
+            }
+
+            let mov = moves[i];
+
             self.state.move_piece(mov);
             let score = -self.search_negamax(-beta, -alpha, depth-1);
             self.state.move_piece(mov.inverse());
