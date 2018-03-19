@@ -55,28 +55,12 @@ impl AI {
         let mut beta = beta;
 
         let mut best_tt_move = None;
+        let mut best_tt_score = None;
 
-        if let Some(transposition) = self.transpositions.get(&self.state) {
+        if let Some((score, mov)) = self.get_transposition(alpha, beta, depth) {
             self.tt_hits += 1;
-            match transposition.evaluation {
-                Evaluation::UpperBound(upper_bound) => {
-                    if upper_bound <= alpha {
-                        self.tt_cutoffs += 1;
-                        return upper_bound;
-                    }
-                    alpha = upper_bound;
-                }
-                Evaluation::LowerBound(lower_bound) => {
-                    if lower_bound >= beta {
-                        self.tt_cutoffs += 1;
-                        return lower_bound;
-                    }
-                    beta = lower_bound;
-                }
-                Evaluation::Exact(_) => {}
-            }
-
-            best_tt_move = Some(transposition.best_move);
+            best_tt_move = Some(mov);
+            best_tt_score = score;
         }
 
         if depth == 0 {
@@ -88,14 +72,19 @@ impl AI {
         let mut best_move = moves[0];
 
         if let Some(mov) = best_tt_move {
-            self.state.move_piece(mov);
-            let best_tt_move_score = self.search_min(alpha, beta, depth-1);
-            self.state.move_piece(mov.inverse());
-            moves_explored += 1;
+            let best_tt_move_score;
+            if let Some(score) = best_tt_score {
+                best_tt_move_score = score;
+            } else {
+                self.state.move_piece(mov);
+                best_tt_move_score = self.search_min(alpha, beta, depth-1);
+                self.state.move_piece(mov.inverse());
+                moves_explored += 1;
+            }
 
             if best_tt_move_score >= beta {
                 self.tt_cutoffs += 1;
-                self.transpositions.insert(self.state, Transposition { evaluation: Evaluation::LowerBound(beta), best_move: mov });
+                self.insert_transposition(Evaluation::LowerBound(beta), mov, depth);
                 self.moves_explored[::std::cmp::min(7, moves_explored)] += 1;
                 return beta;
             }
@@ -115,7 +104,7 @@ impl AI {
 
             if score >= beta {
                 self.beta_cutoffs += 1;
-                self.transpositions.insert(self.state, Transposition { evaluation: Evaluation::LowerBound(beta), best_move: mov });
+                self.insert_transposition(Evaluation::LowerBound(beta), mov, depth);
                 self.moves_explored[::std::cmp::min(7, moves_explored)] += 1;
                 return beta;
             }
@@ -128,9 +117,9 @@ impl AI {
         }
 
         if is_exact {
-            self.transpositions.insert(self.state, Transposition { evaluation: Evaluation::Exact(alpha), best_move });
+            self.insert_transposition(Evaluation::Exact(alpha), best_move, depth);
         } else {
-            self.transpositions.insert(self.state, Transposition { evaluation: Evaluation::UpperBound(alpha), best_move });
+            self.insert_transposition(Evaluation::UpperBound(alpha), best_move, depth);
         }
 
         self.moves_explored[::std::cmp::min(7, moves_explored)] += 1;
@@ -143,30 +132,12 @@ impl AI {
         let mut alpha = alpha;
         let mut beta = beta;
         let mut best_tt_move = None;
+        let mut best_tt_score = None;
 
-        if let Some(transposition) = self.transpositions.get(&self.state) {
+        if let Some((score, mov)) = self.get_transposition(alpha, beta, depth) {
             self.tt_hits += 1;
-            match transposition.evaluation {
-                Evaluation::UpperBound(upper_bound) => {
-                    if beta <= upper_bound {
-                        self.tt_cutoffs += 1;
-                        self.moves_explored[::std::cmp::min(7, moves_explored)] += 1;
-                        return upper_bound;
-                    }
-                    beta = upper_bound;
-                }
-                Evaluation::LowerBound(lower_bound) => {
-                    if alpha >= lower_bound {
-                        self.tt_cutoffs += 1;
-                        self.moves_explored[::std::cmp::min(7, moves_explored)] += 1;
-                        return lower_bound;
-                    }
-                    alpha = lower_bound;
-                }
-                Evaluation::Exact(_) => {}
-            }
-
-            best_tt_move = Some(transposition.best_move);
+            best_tt_move = Some(mov);
+            best_tt_score = score;
         }
 
         if depth == 0 {
@@ -178,14 +149,19 @@ impl AI {
         let mut is_exact = false;
 
         if let Some(mov) = best_tt_move {
-            self.state.move_piece(mov);
-            let best_tt_move_score = self.search_max(alpha, beta, depth-1);
-            self.state.move_piece(mov.inverse());
-            moves_explored += 1;
+            let best_tt_move_score;
+            if let Some(score) = best_tt_score {
+                best_tt_move_score = score;
+            } else {
+                self.state.move_piece(mov);
+                best_tt_move_score = self.search_max(alpha, beta, depth-1);
+                self.state.move_piece(mov.inverse());
+                moves_explored += 1;
+            }
 
             if best_tt_move_score <= alpha {
                 self.tt_cutoffs += 1;
-                self.transpositions.insert(self.state, Transposition { evaluation: Evaluation::UpperBound(alpha), best_move: mov });
+                self.insert_transposition(Evaluation::UpperBound(alpha), mov, depth);
                 self.moves_explored[::std::cmp::min(7, moves_explored)] += 1;
                 return alpha;
             }
@@ -205,7 +181,7 @@ impl AI {
 
             if score <= alpha {
                 self.alpha_cutoffs += 1;
-                self.transpositions.insert(self.state, Transposition { evaluation: Evaluation::UpperBound(alpha), best_move: mov });
+                self.insert_transposition(Evaluation::UpperBound(alpha), mov, depth);
                 self.moves_explored[::std::cmp::min(7, moves_explored)] += 1;
                 return alpha;
             }
@@ -218,9 +194,9 @@ impl AI {
         }
 
         if is_exact {
-            self.transpositions.insert(self.state, Transposition { evaluation: Evaluation::Exact(beta), best_move });
+            self.insert_transposition(Evaluation::Exact(beta), best_move, depth);
         } else {
-            self.transpositions.insert(self.state, Transposition { evaluation: Evaluation::LowerBound(beta), best_move });
+            self.insert_transposition(Evaluation::LowerBound(beta), best_move, depth);
         }
 
         self.moves_explored[::std::cmp::min(7, moves_explored)] += 1;
@@ -280,6 +256,46 @@ impl AI {
         }
     }
 
+    fn insert_transposition(&mut self, evaluation: Evaluation, best_move: Move, depth: usize) {
+        if let Some(transposition) = self.transpositions.get(&self.state) {
+            if transposition.depth > depth {
+                return;
+            }
+        }
+
+        self.transpositions.insert(self.state, Transposition {
+            evaluation,
+            best_move,
+            depth,
+        });
+    }
+
+    fn get_transposition(&mut self, alpha: i64, beta: i64, depth: usize) -> Option<(Option<i64>, Move)> {
+        if let Some(transposition) = self.transpositions.get(&self.state) {
+            let mov = transposition.best_move;
+
+            if transposition.depth >= depth {
+                match transposition.evaluation {
+                    Evaluation::Exact(score) => return Some((Some(score), mov)),
+                    Evaluation::LowerBound(lower_bound) => {
+                        if lower_bound >= beta {
+                            return Some((Some(beta), mov));
+                        }
+                    }
+                    Evaluation::UpperBound(upper_bound) => {
+                        if upper_bound <= alpha {
+                            return Some((Some(alpha), mov));
+                        }
+                    }
+                }
+            }
+
+            return Some((None, mov));
+        }
+
+        None
+    }
+
     pub fn calculate_move(&mut self, depth: usize) -> Move {
         // reset statistics
         self.visited_nodes = 0;
@@ -295,13 +311,18 @@ impl AI {
         let mut moves = self.possible_moves();
         let mut score = i64::min_value();
         for d in 0..depth {
-            let alpha = i64::min_value();
-            let beta = i64::max_value();
+            let mut alpha = i64::min_value();
+            let mut beta = i64::max_value();
 
             moves.sort_by_key(|&mov| {
                 self.state.move_piece(mov);
                 let v = self.search_min(alpha, beta, d);
                 self.state.move_piece(mov.inverse());
+
+                if v > alpha && v < beta{
+                    alpha = v;
+                }
+
                 score = ::std::cmp::max(v, score);
                 -v
             });
@@ -346,5 +367,6 @@ enum Evaluation {
 struct Transposition {
     evaluation: Evaluation,
     best_move: Move,
+    depth: usize,
 }
 

@@ -278,7 +278,7 @@ fn main() {
                 Event::KeyDown { keycode: Some(Keycode::M), .. } => display_moves = !display_moves,
                 Event::KeyDown { keycode: Some(Keycode::U), .. } => game.undo(),
                 Event::KeyDown { keycode: Some(Keycode::A), .. } => {
-                    let depth = 10;
+                    let depth = 4;
                     let mov;
                     if game.state.current_player == 1 {
                         ai1.state = game.state;
