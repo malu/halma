@@ -249,17 +249,30 @@ impl AI {
             return;
         }
 
-        if let Some(transposition) = self.transpositions.get(&self.state) {
-            if transposition.depth > depth {
-                return;
+        use std::collections::hash_map::Entry;
+
+        match self.transpositions.entry(self.state) {
+            Entry::Occupied(mut occ) => {
+                if occ.get().depth > depth {
+                    return;
+                }
+
+                occ.insert(
+                    Transposition {
+                        evaluation,
+                        best_move,
+                        depth,
+                    });
+            }
+            Entry::Vacant(vac) => {
+                vac.insert(
+                    Transposition {
+                        evaluation,
+                        best_move,
+                        depth,
+                    });
             }
         }
-
-        self.transpositions.insert(self.state, Transposition {
-            evaluation,
-            best_move,
-            depth,
-        });
     }
 
     fn get_transposition(&mut self, alpha: i64, beta: i64, depth: usize) -> Option<(Option<i64>, Move)> {
