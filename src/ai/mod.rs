@@ -48,13 +48,12 @@ impl AI {
         result
     }
 
-    fn search_max(&mut self, alpha: i64, beta: i64, depth: usize) -> i64 {
+    fn search_negamax(&mut self, alpha: i64, beta: i64, depth: isize) -> i64 {
         self.visited_nodes += 1;
         let mut moves_explored = 0;
         let mut alpha = alpha;
-        let mut beta = beta;
 
-        if depth == 0 {
+        if depth <= 0 {
             return self.evaluate_position();
         }
 
@@ -68,7 +67,7 @@ impl AI {
                 tt_move_score = score;
             } else {
                 self.state.move_piece(tt_mov);
-                tt_move_score = self.search_min(alpha, beta, depth-1);
+                tt_move_score = -self.search_negamax(-beta, -alpha, depth-1);
                 self.state.move_piece(tt_mov.inverse());
                 moves_explored += 1;
             }
@@ -91,7 +90,7 @@ impl AI {
 
         for mov in moves {
             self.state.move_piece(mov);
-            let score = self.search_min(alpha, beta, depth-1);
+            let score = -self.search_negamax(-beta, -alpha, depth-1);
             self.state.move_piece(mov.inverse());
             moves_explored += 1;
 
@@ -117,78 +116,6 @@ impl AI {
 
         self.moves_explored[::std::cmp::min(7, moves_explored)] += 1;
         alpha
-    }
-
-    fn search_min(&mut self, alpha: i64, beta: i64, depth: usize) -> i64 {
-        self.visited_nodes += 1;
-        let mut moves_explored = 0;
-        let mut alpha = alpha;
-        let mut beta = beta;
-
-        if depth == 0 {
-            return -self.evaluate_position();
-        }
-
-        let mut best_move = None;
-        let mut is_exact = false;
-
-        if let Some((tt_score, tt_mov)) = self.get_transposition(alpha, beta, depth) {
-            self.tt_hits += 1;
-
-            let tt_move_score;
-            if let Some(score) = tt_score {
-                tt_move_score = score;
-            } else {
-                self.state.move_piece(tt_mov);
-                tt_move_score = self.search_max(alpha, beta, depth-1);
-                self.state.move_piece(tt_mov.inverse());
-                moves_explored += 1;
-            }
-
-            if tt_move_score <= alpha {
-                self.tt_cutoffs += 1;
-                self.insert_transposition(Evaluation::UpperBound(alpha), Some(tt_mov), depth);
-                self.moves_explored[::std::cmp::min(7, moves_explored)] += 1;
-                return alpha;
-            }
-
-            if tt_move_score < beta {
-                is_exact = true;
-                best_move = Some(tt_mov);
-                beta = tt_move_score;
-            }
-        }
-
-        let moves = self.possible_moves();
-
-        for mov in moves {
-            self.state.move_piece(mov);
-            let score = self.search_max(alpha, beta, depth-1);
-            self.state.move_piece(mov.inverse());
-            moves_explored += 1;
-
-            if score <= alpha {
-                self.alpha_cutoffs += 1;
-                self.insert_transposition(Evaluation::UpperBound(alpha), Some(mov), depth);
-                self.moves_explored[::std::cmp::min(7, moves_explored)] += 1;
-                return alpha;
-            }
-
-            if score < beta {
-                is_exact = true;
-                best_move = Some(mov);
-                beta = score;
-            }
-        }
-
-        if is_exact {
-            self.insert_transposition(Evaluation::Exact(beta), best_move, depth);
-        } else {
-            self.insert_transposition(Evaluation::LowerBound(beta), best_move, depth);
-        }
-
-        self.moves_explored[::std::cmp::min(7, moves_explored)] += 1;
-        beta
     }
 
     fn evaluate_position(&mut self) -> i64 {
@@ -244,7 +171,7 @@ impl AI {
         }
     }
 
-    fn insert_transposition(&mut self, evaluation: Evaluation, best_move: Option<Move>, depth: usize) {
+    fn insert_transposition(&mut self, evaluation: Evaluation, best_move: Option<Move>, depth: isize) {
         if best_move == None {
             return;
         }
@@ -275,7 +202,7 @@ impl AI {
         }
     }
 
-    fn get_transposition(&mut self, alpha: i64, beta: i64, depth: usize) -> Option<(Option<i64>, Move)> {
+    fn get_transposition(&mut self, alpha: i64, beta: i64, depth: isize) -> Option<(Option<i64>, Move)> {
         if let Some(transposition) = self.transpositions.get(&self.state) {
             if transposition.best_move == None {
                 return None;
@@ -304,7 +231,7 @@ impl AI {
         None
     }
 
-    pub fn calculate_move(&mut self, depth: usize) -> Move {
+    pub fn calculate_move(&mut self, depth: isize) -> Move {
         // reset statistics
         self.visited_nodes = 0;
         self.visited_leaf_nodes = 0;
@@ -319,12 +246,12 @@ impl AI {
         let mut moves = self.possible_moves();
         let mut score = i64::min_value();
         for d in 0..depth {
-            let mut alpha = i64::min_value();
+            let mut alpha = -i64::max_value();
             let mut beta = i64::max_value();
 
             moves.sort_by_key(|&mov| {
                 self.state.move_piece(mov);
-                let v = self.search_min(alpha, beta, d);
+                let v = -self.search_negamax(-beta, -alpha, d);
                 self.state.move_piece(mov.inverse());
 
                 if v > alpha && v < beta{
@@ -375,6 +302,6 @@ enum Evaluation {
 struct Transposition {
     evaluation: Evaluation,
     best_move: Option<Move>,
-    depth: usize,
+    depth: isize,
 }
 
