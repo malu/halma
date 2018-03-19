@@ -39,12 +39,6 @@ impl AI {
                 }
             }
         }
-
-        if self.state.current_player == 1 {
-            result.sort_by_key(|&Move { from: (_, y), to: (_, y2) }| y-y2);
-        } else {
-            result.sort_by_key(|&Move { from: (_, y), to: (_, y2) }| y2-y);
-        }
         result
     }
 
@@ -86,7 +80,13 @@ impl AI {
             }
         }
 
-        let moves = self.possible_moves();
+        let mut moves = self.possible_moves();
+
+        if self.state.current_player == 1 {
+            moves.sort_by_key(|&Move { from: (_, y), to: (_, y2) }| y-y2);
+        } else {
+            moves.sort_by_key(|&Move { from: (_, y), to: (_, y2) }| y2-y);
+        }
 
         for mov in moves {
             self.state.move_piece(mov);
