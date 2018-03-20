@@ -110,6 +110,13 @@ impl AI {
 
     fn search_negamax(&mut self, alpha: Score, beta: Score, depth: isize) -> Score {
         self.visited_nodes += 1;
+
+        if self.state.won(self.state.current_player) {
+            return Score::max_value()-depth;
+        } else if self.state.won(3-self.state.current_player) {
+            return -Score::max_value()+depth;
+        }
+
         let mut moves_explored = 0;
         let mut alpha = alpha;
 

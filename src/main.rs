@@ -100,6 +100,40 @@ impl GameState {
         self.board[x as usize][y as usize]
     }
 
+    pub fn won(&self, player: u8) -> bool {
+        if player == 1 {
+            for x in 4..9 {
+                for y in 12..BOARD_HEIGHT as i8 {
+                    if !self.is_valid_location(x, y) {
+                        continue;
+                    }
+
+                    if self.get(x, y) != Tile::Player(player) {
+                        return false;
+                    }
+                }
+            }
+
+            return true;
+        } else if player == 2 {
+            for x in 4..9 {
+                for y in 0..5 {
+                    if !self.is_valid_location(x, y) {
+                        continue;
+                    }
+
+                    if self.get(x, y) != Tile::Player(player) {
+                        return false;
+                    }
+                }
+            }
+
+            return true;
+        }
+
+        false
+    }
+
     fn reachable_from(&self, x: i8, y: i8) -> Vec<(i8, i8)> {
         let mut result = Vec::new();
         let mut jumping_targets = vec![(x, y)];
