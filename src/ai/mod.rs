@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use {BOARD_HEIGHT, BOARD_WIDTH, GameState, Move, Tile};
 
 type IncrementalHash = usize;
+type Score = isize;
 
 struct IncrementalHasher {
     tile_hashes: [[(IncrementalHash, IncrementalHash); BOARD_HEIGHT as usize]; BOARD_WIDTH as usize],
@@ -107,7 +108,7 @@ impl AI {
         result
     }
 
-    fn search_negamax(&mut self, alpha: i64, beta: i64, depth: isize) -> i64 {
+    fn search_negamax(&mut self, alpha: Score, beta: Score, depth: isize) -> Score {
         self.visited_nodes += 1;
         let mut moves_explored = 0;
         let mut alpha = alpha;
@@ -213,7 +214,7 @@ impl AI {
         alpha
     }
 
-    fn evaluate_position(&mut self) -> i64 {
+    fn evaluate_position(&mut self) -> Score {
         self.visited_leaf_nodes += 1;
 
         let mut score = 0.0;
@@ -260,9 +261,9 @@ impl AI {
         score += score_dist_avg_piece;
 
         if self.state.current_player == 1 {
-            (score*1_000.0) as i64
+            (score*1_000.0) as Score
         } else {
-            (-score*1_000.0) as i64
+            (-score*1_000.0) as Score
         }
     }
 
@@ -317,7 +318,7 @@ impl AI {
         */
     }
 
-    fn get_transposition(&mut self, alpha: i64, beta: i64, depth: isize) -> Option<(Option<i64>, Move)> {
+    fn get_transposition(&mut self, alpha: Score, beta: Score, depth: isize) -> Option<(Option<Score>, Move)> {
         self.tt_lookups += 1;
         if let Some(transposition) = self.transpositions.get(self.hash, self.state) {
             if transposition.best_move == None {
@@ -361,10 +362,10 @@ impl AI {
         println!("Search depth:  {}", depth);
         let start = ::std::time::Instant::now();
         let mut moves = self.possible_moves();
-        let mut score = i64::min_value();
+        let mut score = Score::min_value();
         for d in 0..depth {
-            let mut alpha = -i64::max_value();
-            let mut beta = i64::max_value();
+            let mut alpha = -Score::max_value();
+            let mut beta = Score::max_value();
 
             moves.sort_by_key(|&mov| {
                 self.make_move(mov);
@@ -411,9 +412,9 @@ impl AI {
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 enum Evaluation {
-    Exact(i64),
-    LowerBound(i64),
-    UpperBound(i64)
+    Exact(Score),
+    LowerBound(Score),
+    UpperBound(Score)
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
