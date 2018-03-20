@@ -187,7 +187,17 @@ impl AI {
             let mov = moves[i];
 
             self.make_move(mov);
-            let score = -self.search_negamax(-beta, -alpha, depth-1);
+            let score;
+            if moves_explored == 0 {
+                score = -self.search_negamax(-beta, -alpha, depth-1);
+            } else {
+                let null_score = -self.search_negamax(-alpha-1, -alpha, depth-2);
+                if null_score > alpha {
+                    score = -self.search_negamax(-beta, -alpha, depth-1);
+                } else {
+                    score = null_score;
+                }
+            }
             self.unmake_move(mov);
             moves_explored += 1;
 
@@ -365,13 +375,25 @@ impl AI {
         let mut moves = self.possible_moves();
         let mut score = Score::min_value();
         for d in 0..depth {
+            let mut moves_explored = 0;
             let mut alpha = -Score::max_value();
             let mut beta = Score::max_value();
 
             moves.sort_by_key(|&mov| {
                 self.make_move(mov);
-                let v = -self.search_negamax(-beta, -alpha, d);
+                let v;
+                if moves_explored == 0 {
+                    v = -self.search_negamax(-beta, -alpha, d);
+                } else {
+                    let null_v = -self.search_negamax(-alpha-1, -alpha, d-1);
+                    if null_v > alpha {
+                        v = -self.search_negamax(-beta, -alpha, d);
+                    } else {
+                        v = null_v;
+                    }
+                }
                 self.unmake_move(mov);
+                moves_explored += 1;
 
                 if v > alpha && v < beta{
                     alpha = v;
