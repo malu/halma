@@ -87,15 +87,13 @@ impl GameState {
     }
 
     fn set(&mut self, x: i8, y: i8, tile: Tile) {
-        if self.is_valid_location(x, y) {
-            self.board[x as usize][y as usize] = tile;
-        }
+        assert!(self.is_valid_location(x, y));
+        self.board[x as usize][y as usize] = tile;
     }
 
     fn get(&self, x: i8, y: i8) -> Tile {
-        if x < 0 || y < 0 || x as u8 >= BOARD_WIDTH || y as u8 >= BOARD_HEIGHT {
-            return Tile::Invalid;
-        }
+        assert!(x >= 0 && (x as u8) < BOARD_WIDTH);
+        assert!(y >= 0 && (y as u8) < BOARD_HEIGHT);
 
         self.board[x as usize][y as usize]
     }
@@ -139,6 +137,10 @@ impl GameState {
         let mut jumping_targets = vec![(x, y)];
 
         for &(dx, dy) in &[(-1, 0), (1, 0), (-y%2+1, 1), (-y%2, 1), (-y%2+1, -1), (-y%2, -1)] {
+            if !self.is_valid_location(x+dx, y+dy) {
+                continue;
+            }
+
             if self.get(x+dx, y+dy) == Tile::Empty {
                 result.push((x+dx, y+dy));
             }
@@ -148,6 +150,10 @@ impl GameState {
             let (x, y) = jumping_targets.pop().unwrap();
 
             for &(dx, dy, jx, jy) in &[(-1, 0, -2, 0), (1, 0, 2, 0), (-y%2+1, 1, 1, 2), (-y%2, 1, -1, 2), (-y%2+1, -1, 1, -2), (-y%2, -1, -1, -2)] {
+                if !self.is_valid_location(x+dx, y+dy) || !self.is_valid_location(x+jx, y+jy) {
+                    continue;
+                }
+
                 if let Tile::Player(_) = self.get(x+dx, y+dy) {
                     if self.get(x+jx, y+jy) == Tile::Empty && !jumping_targets.contains(&(x+jx, y+jy)) && !result.contains(&(x+jx, y+jy)) {
                         jumping_targets.push((x+jx, y+jy));
