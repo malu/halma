@@ -5,3 +5,4 @@ authors = ["Maximilian Lupke <maxlupke@gmail.com>"]
 
 [dependencies]
 sdl2 = { version = "0.31", features = ["gfx"] }
+rand = "0.4.2"

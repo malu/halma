@@ -1,3 +1,4 @@
+extern crate rand;
 extern crate sdl2;
 
 use sdl2::event::Event;
@@ -281,13 +282,13 @@ fn main() {
                     let depth = 4;
                     let mov;
                     if game.state.current_player == 1 {
-                        ai1.state = game.state;
                         mov = ai1.calculate_move(depth);
                     } else {
-                        ai2.state = game.state;
                         mov = ai2.calculate_move(depth);
                     }
                     game.move_piece(mov);
+                    ai1.make_move(mov);
+                    ai2.make_move(mov);
                 }
                 Event::MouseMotion { x, y, .. } => {
                     mouse_x = x;

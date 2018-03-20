@@ -2,31 +2,96 @@ use std::collections::HashMap;
 
 use {BOARD_HEIGHT, BOARD_WIDTH, GameState, Move, Tile};
 
+type IncrementalHash = usize;
+
+struct IncrementalHasher {
+    tile_hashes: [[(IncrementalHash, IncrementalHash); BOARD_HEIGHT as usize]; BOARD_WIDTH as usize],
+    to_move_hash: IncrementalHash,
+}
+
+impl Default for IncrementalHasher {
+    fn default() -> Self {
+        use rand::Rng;
+        let mut rng = ::rand::thread_rng();
+
+        let mut tile_hashes = [[(0, 0); BOARD_HEIGHT as usize]; BOARD_WIDTH as usize];
+
+        for x in 0..BOARD_WIDTH as usize {
+            for y in 0..BOARD_HEIGHT as usize {
+                tile_hashes[x][y] = (rng.gen::<IncrementalHash>(), rng.gen::<IncrementalHash>());
+            }
+        }
+
+        let to_move_hash = rng.gen();
+
+        IncrementalHasher {
+            tile_hashes,
+            to_move_hash,
+        }
+    }
+}
+
 pub struct AI {
     pub state: GameState,
-    transpositions: HashMap<GameState, Transposition>,
+    transpositions: TranspositionTable,
     visited_nodes: usize,
     visited_leaf_nodes: usize,
     alpha_cutoffs: usize,
     beta_cutoffs: usize,
+    tt_lookups: usize,
     tt_hits: usize,
     tt_cutoffs: usize,
     moves_explored: [usize; 8],
+
+    hasher: IncrementalHasher,
+    hash: IncrementalHash
 }
 
 impl AI {
     pub fn new(state: GameState) -> AI {
         AI {
             state,
-            transpositions: HashMap::new(),
+            transpositions: TranspositionTable::default(),
             visited_nodes: 0,
             visited_leaf_nodes: 0,
             alpha_cutoffs: 0,
             beta_cutoffs: 0,
+            tt_lookups: 0,
             tt_hits: 0,
             tt_cutoffs: 0,
             moves_explored: [0; 8],
+
+            hasher: Default::default(),
+            hash: 0,
         }
+    }
+
+    pub fn make_move(&mut self, mov: Move) {
+        let from;
+        let to;
+        if self.state.current_player == 1 {
+            from = self.hasher.tile_hashes[mov.from.0 as usize][mov.from.1 as usize].0;
+            to = self.hasher.tile_hashes[mov.to.0 as usize][mov.to.1 as usize].0;
+        } else {
+            from = self.hasher.tile_hashes[mov.from.0 as usize][mov.from.1 as usize].1;
+            to = self.hasher.tile_hashes[mov.to.0 as usize][mov.to.1 as usize].1;
+        }
+        self.hash ^= from ^ to ^ self.hasher.to_move_hash;
+        self.state.move_piece(mov);
+    }
+
+    pub fn unmake_move(&mut self, mov: Move) {
+        self.state.move_piece(mov.inverse());
+        let from;
+        let to;
+        if self.state.current_player == 1 {
+            from = self.hasher.tile_hashes[mov.from.0 as usize][mov.from.1 as usize].0;
+            to = self.hasher.tile_hashes[mov.to.0 as usize][mov.to.1 as usize].0;
+        } else {
+            from = self.hasher.tile_hashes[mov.from.0 as usize][mov.from.1 as usize].1;
+            to = self.hasher.tile_hashes[mov.to.0 as usize][mov.to.1 as usize].1;
+        }
+        self.hash ^= from ^ to ^ self.hasher.to_move_hash;
     }
 
     pub fn possible_moves(&self) -> Vec<Move> {
@@ -60,9 +125,9 @@ impl AI {
             if let Some(score) = tt_score {
                 tt_move_score = score;
             } else {
-                self.state.move_piece(tt_mov);
+                self.make_move(tt_mov);
                 tt_move_score = -self.search_negamax(-beta, -alpha, depth-1);
-                self.state.move_piece(tt_mov.inverse());
+                self.unmake_move(tt_mov);
                 moves_explored += 1;
             }
 
@@ -119,9 +184,9 @@ impl AI {
 
             let mov = moves[i];
 
-            self.state.move_piece(mov);
+            self.make_move(mov);
             let score = -self.search_negamax(-beta, -alpha, depth-1);
-            self.state.move_piece(mov.inverse());
+            self.unmake_move(mov);
             moves_explored += 1;
 
             if score >= beta {
@@ -206,6 +271,25 @@ impl AI {
             return;
         }
 
+        let transposition = Transposition {
+            evaluation,
+            best_move,
+            depth,
+        };
+
+        let old = self.transpositions.get(self.hash, self.state);
+        if old.is_none() {
+            self.transpositions.insert(self.hash, self.state, transposition);
+            return;
+        }
+
+        if old.unwrap().depth > depth {
+            return;
+        }
+
+        self.transpositions.insert(self.hash, self.state, transposition);
+
+        /*
         use std::collections::hash_map::Entry;
 
         match self.transpositions.entry(self.state) {
@@ -230,10 +314,12 @@ impl AI {
                     });
             }
         }
+        */
     }
 
     fn get_transposition(&mut self, alpha: i64, beta: i64, depth: isize) -> Option<(Option<i64>, Move)> {
-        if let Some(transposition) = self.transpositions.get(&self.state) {
+        self.tt_lookups += 1;
+        if let Some(transposition) = self.transpositions.get(self.hash, self.state) {
             if transposition.best_move == None {
                 return None;
             }
@@ -267,6 +353,7 @@ impl AI {
         self.visited_leaf_nodes = 0;
         self.alpha_cutoffs = 0;
         self.beta_cutoffs = 0;
+        self.tt_lookups = 0;
         self.tt_hits = 0;
         self.tt_cutoffs = 0;
         self.moves_explored = [0; 8];
@@ -280,9 +367,9 @@ impl AI {
             let mut beta = i64::max_value();
 
             moves.sort_by_key(|&mov| {
-                self.state.move_piece(mov);
+                self.make_move(mov);
                 let v = -self.search_negamax(-beta, -alpha, d);
-                self.state.move_piece(mov.inverse());
+                self.unmake_move(mov);
 
                 if v > alpha && v < beta{
                     alpha = v;
@@ -300,11 +387,10 @@ impl AI {
         println!("        | leaf    {} ({:.2}%)", self.visited_leaf_nodes, 100.0 * self.visited_leaf_nodes as f64 / self.visited_nodes as f64);
         println!("cutoffs | alpha   {} ({:.2}%)", self.alpha_cutoffs, 100.0 * self.alpha_cutoffs as f64 / self.visited_nodes as f64);
         println!("        | beta    {} ({:.2}%)", self.beta_cutoffs, 100.0 * self.beta_cutoffs as f64 / self.visited_nodes as f64);
-        let tt_lookups = self.visited_nodes;
-        println!("     TT | lookups {}", tt_lookups);
-        println!("        | hits    {} ({:.2}%)", self.tt_hits, 100.0 * self.tt_hits as f64 / tt_lookups as f64);
-        println!("        | cutoffs {} ({:.2}%)", self.tt_cutoffs, 100.0 * self.tt_cutoffs as f64 / tt_lookups as f64);
-        println!("        | size    {}", self.transpositions.len());
+        println!("     TT | lookups {}", self.tt_lookups);
+        println!("        | hits    {} ({:.2}%)", self.tt_hits, 100.0 * self.tt_hits as f64 / self.tt_lookups as f64);
+        println!("        | cutoffs {} ({:.2}%)", self.tt_cutoffs, 100.0 * self.tt_cutoffs as f64 / self.tt_lookups as f64);
+        println!("        | size    {} ({} kb)", self.transpositions.len(), (self.transpositions.len() * ::std::mem::size_of::<Option<(GameState, Transposition)>>()) / 1024);
         let total_moves_explored = self.moves_explored.iter().sum::<usize>() as f64;
         println!("  expl. | 0:  {} ({:.3}%)", self.moves_explored[0], 100.0 * self.moves_explored[0] as f64 / total_moves_explored);
         println!("        | 1:  {} ({:.3}%)", self.moves_explored[1], 100.0 * self.moves_explored[1] as f64 / total_moves_explored);
@@ -323,15 +409,60 @@ impl AI {
     }
 }
 
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
 enum Evaluation {
     Exact(i64),
     LowerBound(i64),
     UpperBound(i64)
 }
 
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
 struct Transposition {
     evaluation: Evaluation,
     best_move: Option<Move>,
     depth: isize,
+}
+
+const TT_BITS: usize = 16;
+const TT_SIZE: usize = 1 << TT_BITS;
+
+struct TranspositionTable {
+    table: Vec<Option<(GameState, Transposition)>>,
+}
+
+impl Default for TranspositionTable {
+    fn default() -> Self {
+        let mut table = Vec::with_capacity(TT_SIZE);
+
+        for _ in 0..TT_SIZE {
+            table.push(None);
+        }
+
+        TranspositionTable {
+            table
+        }
+    }
+}
+
+impl TranspositionTable {
+    fn len(&self) -> usize {
+        self.table.iter().filter(|option| option.is_some()).count()
+    }
+
+    fn get(&self, hash: IncrementalHash, state: GameState) -> Option<Transposition> {
+        if let Some((tstate, t)) = self.table[hash % TT_SIZE] {
+            if tstate != state {
+                return None;
+            } else {
+                return Some(t);
+            }
+        }
+        
+        None
+    }
+
+    fn insert(&mut self, hash: IncrementalHash, state: GameState, transposition: Transposition) {
+        self.table[hash % TT_SIZE] = Some((state, transposition));
+    }
 }
 
