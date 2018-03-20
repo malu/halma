@@ -149,12 +149,6 @@ impl AI {
         let mut moves = self.possible_moves();
         let num_moves = moves.len();
 
-        if self.state.current_player == 1 {
-            moves.sort_by_key(|&Move { from: (_, y), to: (_, y2) }| y-y2);
-        } else {
-            moves.sort_by_key(|&Move { from: (_, y), to: (_, y2) }| y2-y);
-        }
-
         let current_player = self.state.current_player;
         let score_move_order = |mov: Move| -> isize {
             if current_player == 1 {
