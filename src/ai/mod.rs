@@ -1,9 +1,9 @@
-use std::collections::HashMap;
-
 use {BOARD_HEIGHT, BOARD_WIDTH, GameState, Move, Tile};
 
 type IncrementalHash = usize;
 type Score = isize;
+
+const ONE_PLY: isize = 1000;
 
 struct IncrementalHasher {
     tile_hashes: [[(IncrementalHash, IncrementalHash); BOARD_HEIGHT as usize]; BOARD_WIDTH as usize],
@@ -37,7 +37,6 @@ pub struct AI {
     transpositions: TranspositionTable,
     visited_nodes: usize,
     visited_leaf_nodes: usize,
-    alpha_cutoffs: usize,
     beta_cutoffs: usize,
     tt_lookups: usize,
     tt_hits: usize,
@@ -55,7 +54,6 @@ impl AI {
             transpositions: TranspositionTable::default(),
             visited_nodes: 0,
             visited_leaf_nodes: 0,
-            alpha_cutoffs: 0,
             beta_cutoffs: 0,
             tt_lookups: 0,
             tt_hits: 0,
@@ -67,7 +65,7 @@ impl AI {
         }
     }
 
-    pub fn make_move(&mut self, mov: Move) {
+    fn update_hash(&mut self, mov: Move) {
         let from;
         let to;
         if self.state.current_player == 1 {
@@ -78,21 +76,16 @@ impl AI {
             to = self.hasher.tile_hashes[mov.to.0 as usize][mov.to.1 as usize].1;
         }
         self.hash ^= from ^ to ^ self.hasher.to_move_hash;
+    }
+
+    pub fn make_move(&mut self, mov: Move) {
+        self.update_hash(mov);
         self.state.move_piece(mov);
     }
 
     pub fn unmake_move(&mut self, mov: Move) {
         self.state.move_piece(mov.inverse());
-        let from;
-        let to;
-        if self.state.current_player == 1 {
-            from = self.hasher.tile_hashes[mov.from.0 as usize][mov.from.1 as usize].0;
-            to = self.hasher.tile_hashes[mov.to.0 as usize][mov.to.1 as usize].0;
-        } else {
-            from = self.hasher.tile_hashes[mov.from.0 as usize][mov.from.1 as usize].1;
-            to = self.hasher.tile_hashes[mov.to.0 as usize][mov.to.1 as usize].1;
-        }
-        self.hash ^= from ^ to ^ self.hasher.to_move_hash;
+        self.update_hash(mov.inverse());
     }
 
     pub fn possible_moves(&self) -> Vec<Move> {
@@ -111,34 +104,51 @@ impl AI {
     fn search_negamax(&mut self, alpha: Score, beta: Score, depth: isize) -> Score {
         self.visited_nodes += 1;
 
-        if self.state.won(self.state.current_player) {
-            return Score::max_value()-depth;
-        } else if self.state.won(3-self.state.current_player) {
+        // 1. Check if we lost.
+        if self.state.won(3-self.state.current_player) {
             return -Score::max_value()+depth;
         }
 
-        let mut moves_explored = 0;
-        let mut alpha = alpha;
-
+        // 2. Check if we ran out of depth and have to evaluate the position staticly.
         if depth <= 0 {
             return self.evaluate_position();
         }
 
+        // Tracks the number of moves tried in this position. We use this to distinguish between
+        // the first move we try (which we expect to be the best/principal variation) and the other
+        // moves (which we first try to evaluate using a null window). Additionally, the statistic
+        // how often we explore 0, 1, .., 6 and 7 or more moves is nice.
+        let mut moves_explored = 0;
+        let mut alpha = alpha;
+
+        // Whether we found any move which increases alpha and did not exceed beta.
         let mut is_exact = false;
+
+        // The best response we found.
         let mut best_move = None;
 
+        // 3. Lookup current position in transposition table. If we encountered this position
+        //    before, previous evaluations or best moves are useful to get an early beta cutoff
+        //    (which in this case will be tracked as a transposition table cutoff in the statistic).
         if let Some((tt_score, tt_mov)) = self.get_transposition(alpha, beta, depth) {
             self.tt_hits += 1;
+
+            // tt_score is not None if the position in the transposition table was evaluated to a
+            // higher depth. In that case we will not reevaluate but use the score as is. Otherwise
+            // evaluate this move as any other move.
             let tt_move_score;
             if let Some(score) = tt_score {
                 tt_move_score = score;
             } else {
+                // There is no possible path in which we evaluate another move first. Hence we can
+                // skip the check whether this is the first evaluated move.
                 self.make_move(tt_mov);
-                tt_move_score = -self.search_negamax(-beta, -alpha, depth-1);
+                tt_move_score = -self.search_negamax(-beta, -alpha, depth-ONE_PLY);
                 self.unmake_move(tt_mov);
                 moves_explored += 1;
             }
 
+            // In this case we track beta cutoffs as transposition table cutoffs.
             if tt_move_score >= beta {
                 self.tt_cutoffs += 1;
                 self.insert_transposition(Evaluation::LowerBound(beta), Some(tt_mov), depth);
@@ -153,9 +163,7 @@ impl AI {
             }
         }
 
-        let mut moves = self.possible_moves();
-        let num_moves = moves.len();
-
+        // We score the moves (for ordering purposes) by how far they advance along the board.
         let current_player = self.state.current_player;
         let score_move_order = |mov: Move| -> isize {
             if current_player == 1 {
@@ -165,10 +173,13 @@ impl AI {
             }
         };
 
+        // 4. Evaluate remaining moves. We first try the 8 highest rated moves (with respect to the
+        //    move ordering score above). If we did not get a beta cutoff during these 8 moves, we
+        //    try the remaining moves in any order because the move ordering seems bad and we give
+        //    up sorting.
+        let mut moves = self.possible_moves();
+        let num_moves = moves.len();
         for i in 0..num_moves {
-            // Sort the moves using insertion sort.
-            // Only sort the first 8 moves. If we cannot get a cutoff by then, we probably will not
-            // get a cutoff at all.
             if moves_explored < 8 {
                 let mut max_i = i;
                 let mut max_move_score = score_move_order(moves[max_i]);
@@ -185,15 +196,18 @@ impl AI {
             }
 
             let mov = moves[i];
-
             self.make_move(mov);
             let score;
+
+            // Only the first move is evaluated with maximum depth. All other moves are first
+            // evaluated using a null window and a shallower depth. If the null window evaluation
+            // fails high, we retry using the full window.
             if moves_explored == 0 {
-                score = -self.search_negamax(-beta, -alpha, depth-1);
+                score = -self.search_negamax(-beta, -alpha, depth-ONE_PLY);
             } else {
-                let null_score = -self.search_negamax(-alpha-1, -alpha, depth-2);
+                let null_score = -self.search_negamax(-alpha-1, -alpha, depth-ONE_PLY*5/3);
                 if null_score > alpha {
-                    score = -self.search_negamax(-beta, -alpha, depth-1);
+                    score = -self.search_negamax(-beta, -alpha, depth-ONE_PLY);
                 } else {
                     score = null_score;
                 }
@@ -285,7 +299,7 @@ impl AI {
 
         let transposition = Transposition {
             evaluation,
-            best_move,
+            best_move: best_move.unwrap(),
             depth,
         };
 
@@ -300,60 +314,33 @@ impl AI {
         }
 
         self.transpositions.insert(self.hash, self.state, transposition);
-
-        /*
-        use std::collections::hash_map::Entry;
-
-        match self.transpositions.entry(self.state) {
-            Entry::Occupied(mut occ) => {
-                if occ.get().depth > depth {
-                    return;
-                }
-
-                occ.insert(
-                    Transposition {
-                        evaluation,
-                        best_move,
-                        depth,
-                    });
-            }
-            Entry::Vacant(vac) => {
-                vac.insert(
-                    Transposition {
-                        evaluation,
-                        best_move,
-                        depth,
-                    });
-            }
-        }
-        */
     }
 
     fn get_transposition(&mut self, alpha: Score, beta: Score, depth: isize) -> Option<(Option<Score>, Move)> {
         self.tt_lookups += 1;
         if let Some(transposition) = self.transpositions.get(self.hash, self.state) {
-            if transposition.best_move == None {
-                return None;
-            }
-            let mov = transposition.best_move.unwrap();
+            let mov = transposition.best_move;
 
-            if transposition.depth >= depth {
-                match transposition.evaluation {
-                    Evaluation::Exact(score) => return Some((Some(score), mov)),
-                    Evaluation::LowerBound(lower_bound) => {
-                        if lower_bound >= beta {
-                            return Some((Some(beta), mov));
-                        }
+            // If the depth used to evaluate the position now is higher than the one we used
+            // before, do not use the transposition table and reevaluate. Only take the best_move
+            // from before as move to evaluate first.
+            if transposition.depth < depth {
+                return Some((None, mov));
+            }
+
+            match transposition.evaluation {
+                Evaluation::Exact(score) => return Some((Some(score), mov)),
+                Evaluation::LowerBound(lower_bound) => {
+                    if lower_bound >= beta {
+                        return Some((Some(beta), mov));
                     }
-                    Evaluation::UpperBound(upper_bound) => {
-                        if upper_bound <= alpha {
-                            return Some((Some(alpha), mov));
-                        }
+                }
+                Evaluation::UpperBound(upper_bound) => {
+                    if upper_bound <= alpha {
+                        return Some((Some(alpha), mov));
                     }
                 }
             }
-
-            return Some((None, mov));
         }
 
         None
@@ -363,7 +350,6 @@ impl AI {
         // reset statistics
         self.visited_nodes = 0;
         self.visited_leaf_nodes = 0;
-        self.alpha_cutoffs = 0;
         self.beta_cutoffs = 0;
         self.tt_lookups = 0;
         self.tt_hits = 0;
@@ -383,11 +369,11 @@ impl AI {
                 self.make_move(mov);
                 let v;
                 if moves_explored == 0 {
-                    v = -self.search_negamax(-beta, -alpha, d);
+                    v = -self.search_negamax(-beta, -alpha, d*ONE_PLY);
                 } else {
-                    let null_v = -self.search_negamax(-alpha-1, -alpha, d-1);
+                    let null_v = -self.search_negamax(-alpha-1, -alpha, d*ONE_PLY-ONE_PLY*5/3);
                     if null_v > alpha {
-                        v = -self.search_negamax(-beta, -alpha, d);
+                        v = -self.search_negamax(-beta, -alpha, d*ONE_PLY);
                     } else {
                         v = null_v;
                     }
@@ -409,8 +395,7 @@ impl AI {
         let secs = elapsed.as_secs() as f64 + elapsed.subsec_nanos() as f64 / 1_000_000_000.0;
         println!("  nodes | total   {} ({:.3} nodes/s)", self.visited_nodes, self.visited_nodes as f64 / secs);
         println!("        | leaf    {} ({:.2}%)", self.visited_leaf_nodes, 100.0 * self.visited_leaf_nodes as f64 / self.visited_nodes as f64);
-        println!("cutoffs | alpha   {} ({:.2}%)", self.alpha_cutoffs, 100.0 * self.alpha_cutoffs as f64 / self.visited_nodes as f64);
-        println!("        | beta    {} ({:.2}%)", self.beta_cutoffs, 100.0 * self.beta_cutoffs as f64 / self.visited_nodes as f64);
+        println!("cutoffs | beta    {} ({:.2}%)", self.beta_cutoffs, 100.0 * self.beta_cutoffs as f64 / self.visited_nodes as f64);
         println!("     TT | lookups {}", self.tt_lookups);
         println!("        | hits    {} ({:.2}%)", self.tt_hits, 100.0 * self.tt_hits as f64 / self.tt_lookups as f64);
         println!("        | cutoffs {} ({:.2}%)", self.tt_cutoffs, 100.0 * self.tt_cutoffs as f64 / self.tt_lookups as f64);
@@ -443,7 +428,7 @@ enum Evaluation {
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 struct Transposition {
     evaluation: Evaluation,
-    best_move: Option<Move>,
+    best_move: Move,
     depth: isize,
 }
 
