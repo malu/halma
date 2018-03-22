@@ -41,6 +41,8 @@ pub struct AI {
     tt_lookups: usize,
     tt_hits: usize,
     tt_cutoffs: usize,
+    pv_nullsearches: usize,
+    pv_failed_nullsearches: usize,
     moves_explored: [usize; 8],
 
     hasher: IncrementalHasher,
@@ -58,6 +60,8 @@ impl AI {
             tt_lookups: 0,
             tt_hits: 0,
             tt_cutoffs: 0,
+            pv_nullsearches: 0,
+            pv_failed_nullsearches: 0,
             moves_explored: [0; 8],
 
             hasher: Default::default(),
@@ -206,8 +210,10 @@ impl AI {
                 score = -self.search_negamax(-beta, -alpha, depth-ONE_PLY);
             } else {
                 let null_score = -self.search_negamax(-alpha-1, -alpha, depth-ONE_PLY*5/3);
+                self.pv_nullsearches += 1;
                 if null_score > alpha {
                     score = -self.search_negamax(-beta, -alpha, depth-ONE_PLY);
+                    self.pv_failed_nullsearches += 1;
                 } else {
                     score = null_score;
                 }
@@ -354,6 +360,8 @@ impl AI {
         self.tt_lookups = 0;
         self.tt_hits = 0;
         self.tt_cutoffs = 0;
+        self.pv_nullsearches = 0;
+        self.pv_failed_nullsearches = 0;
         self.moves_explored = [0; 8];
 
         println!("Search depth:  {}", depth);
@@ -372,8 +380,10 @@ impl AI {
                     v = -self.search_negamax(-beta, -alpha, d*ONE_PLY);
                 } else {
                     let null_v = -self.search_negamax(-alpha-1, -alpha, d*ONE_PLY-ONE_PLY*5/3);
+                    self.pv_nullsearches += 1;
                     if null_v > alpha {
                         v = -self.search_negamax(-beta, -alpha, d*ONE_PLY);
+                        self.pv_failed_nullsearches += 1;
                     } else {
                         v = null_v;
                     }
@@ -401,6 +411,8 @@ impl AI {
         println!("        | hits    {} ({:.2}%)", self.tt_hits, 100.0 * self.tt_hits as f64 / self.tt_lookups as f64);
         println!("        | cutoffs {} ({:.2}%)", self.tt_cutoffs, 100.0 * self.tt_cutoffs as f64 / self.tt_hits as f64);
         println!("        | size    {} ({} MB)", self.transpositions.len(), (self.transpositions.len() * ::std::mem::size_of::<Option<(GameState, Transposition)>>()) / (1024*1024));
+        println!("     PV | 0-wind. {}", self.pv_nullsearches);
+        println!("        | failed  {} ({:.2}%)", self.pv_failed_nullsearches, 100.0 * self.pv_failed_nullsearches  as f64 / self.pv_nullsearches as f64);
         let total_moves_explored = self.moves_explored.iter().sum::<usize>() as f64;
         println!("  expl. | 0:  {} ({:.3}%)", self.moves_explored[0], 100.0 * self.moves_explored[0] as f64 / total_moves_explored);
         println!("        | 1:  {} ({:.3}%)", self.moves_explored[1], 100.0 * self.moves_explored[1] as f64 / total_moves_explored);
