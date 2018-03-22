@@ -146,8 +146,9 @@ impl AI {
             } else {
                 // There is no possible path in which we evaluate another move first. Hence we can
                 // skip the check whether this is the first evaluated move.
+                assert!(moves_explored == 0);
                 self.make_move(tt_mov);
-                tt_move_score = -self.search_negamax(-beta, -alpha, depth-ONE_PLY);
+                tt_move_score = -self.search_negamax(ply+1, -beta, -alpha, depth-ONE_PLY+ext_plies, extensions);
                 self.unmake_move(tt_mov);
                 moves_explored += 1;
             }
