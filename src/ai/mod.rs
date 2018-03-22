@@ -381,11 +381,9 @@ impl AI {
                 self.unmake_move(mov);
                 moves_explored += 1;
 
-                if v > alpha && v < beta{
-                    alpha = v;
-                }
+                alpha = ::std::cmp::max(alpha, v);
 
-                score = ::std::cmp::max(v, score);
+                score = ::std::cmp::max(alpha, score);
                 -v
             });
         }
