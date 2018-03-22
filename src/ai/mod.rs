@@ -268,29 +268,61 @@ impl AI {
         };
         score += score_dist_last_piece;
 
+        let score_dist_first_piece = {
+            let mut p1_dist = 0;
+            let mut p2_dist = 0;
+
+            for x in 0..BOARD_WIDTH as i8 {
+                for y in 0..BOARD_HEIGHT as i8 {
+                    if self.state.get(x, y) == Tile::Player(1) {
+                        p1_dist = ::std::cmp::min(p1_dist, BOARD_HEIGHT as i8 -1-y);
+                    } else if self.state.get(x, y) == Tile::Player(2) {
+                        p2_dist = ::std::cmp::min(p2_dist, y);
+                    }
+                }
+            }
+
+            -(p2_dist-p1_dist) as f32
+        };
+        score += score_dist_first_piece/3.;
+
         let score_dist_avg_piece = {
             let mut p1_total_dist: i64 = 0;
             let mut p2_total_dist: i64 = 0;
 
             for x in 0..BOARD_WIDTH as i8 {
                 for y in 0..BOARD_HEIGHT as i8 {
-                    let xdiff = if y % 2 == 0 {
-                        (x-6).abs() as i64
-                    } else {
-                        ::std::cmp::min((x-6).abs(), (x-7).abs()) as i64
-                    };
-
                     if self.state.get(x, y) == Tile::Player(1) {
-                        p1_total_dist += 2*(BOARD_HEIGHT as i64 - 1 - y as i64) + xdiff;
+                        p1_total_dist += BOARD_HEIGHT as i64 - 1 - y as i64;
                     } else if self.state.get(x, y) == Tile::Player(2) {
-                        p2_total_dist += 2*(y as i64) + xdiff;
+                        p2_total_dist += y as i64;
                     }
                 }
             }
 
-            (p2_total_dist-p1_total_dist) as f32 / 2.0 / 15.0
+            (p2_total_dist-p1_total_dist) as f32 / 15.0
         };
         score += score_dist_avg_piece;
+
+        let score_center = {
+            let mut p1_center: i64 = 0;
+            let mut p2_center: i64 = 0;
+
+            for x in 0..BOARD_WIDTH as i8 {
+                for y in 0..BOARD_HEIGHT as i8 {
+                    if x < 4 || x > 8 + y%2 {
+                        if self.state.get(x, y) == Tile::Player(1) {
+                            p1_center -= ::std::cmp::min(4-x, x-(8+y%2)) as i64;
+                        } else if self.state.get(x, y) == Tile::Player(2) {
+                            p2_center -= ::std::cmp::min(4-x, x-(8+y%2)) as i64;
+                        }
+                    }
+                }
+            }
+
+            (p2_center-p1_center) as f32 / 15.0
+        };
+        score += score_center/3.0;
 
         if self.state.current_player == 1 {
             (score*1_000.0) as Score
