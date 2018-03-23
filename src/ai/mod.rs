@@ -19,7 +19,7 @@ impl Default for IncrementalHasher {
 
         for x in 0..BOARD_WIDTH as usize {
             for y in 0..BOARD_HEIGHT as usize {
-                tile_hashes[x][y] = (rng.gen::<IncrementalHash>(), rng.gen::<IncrementalHash>());
+                tile_hashes[x][y] = (rng.gen(), rng.gen());
             }
         }
 
