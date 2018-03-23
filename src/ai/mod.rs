@@ -324,6 +324,38 @@ impl AI {
         };
         score += score_center/3.0;
 
+        let score_kinds = {
+            let mut p1_kinds = [0; 4];
+            let mut p2_kinds = [0; 4];
+
+            let mut p1_target = [0; 4];
+            let mut p2_target = [0; 4];
+
+            for x in 0..BOARD_WIDTH as i8 {
+                for y in 0..BOARD_HEIGHT as i8 {
+                    if y < 5 && 4 <= x && x <= 8 {
+                        p2_target[kind(x, y)] += 1;
+                    }
+
+                    if y > 11 && 4 <= x && x <= 8 {
+                        p1_target[kind(x, y)] += 1;
+                    }
+
+                    if self.state.get(x, y) == Tile::Player(1) {
+                        p1_kinds[kind(x, y)] += 1;
+                    } else if self.state.get(x, y) == Tile::Player(2) {
+                        p2_kinds[kind(x, y)] += 1;
+                    }
+                }
+            }
+
+            let p1: isize = p1_kinds.iter().zip(&p1_target).map(|(&have, &target): (&isize, &isize)| (target-have).abs()).sum();
+            let p2: isize = p2_kinds.iter().zip(&p2_target).map(|(&have, &target): (&isize, &isize)| (target-have).abs()).sum();
+
+            (p2 - p1) as f32
+        };
+        score += score_kinds/6.;
+
         if self.state.current_player == 1 {
             (score*1_000.0) as Score
         } else {
@@ -541,6 +573,32 @@ impl TranspositionTable {
         }
 
         self.table[hash % TT_SIZE] = Some((state, transposition));
+    }
+}
+
+fn kind(x: i8, y: i8) -> usize {
+    (2*((x + y/2)%2) + y%2) as usize
+}
+
+mod tests {
+    #[test]
+    fn test_kinds() {
+        use ai::kind;
+
+        let x = 6;
+        let y = 9;
+
+        assert_eq!(kind(x, y), kind(x+2, y));
+        assert_eq!(kind(x, y), kind(x-2, y));
+        assert_eq!(kind(x, y), kind(x+1, y+2));
+        assert_eq!(kind(x, y), kind(x-1, y+2));
+        assert_eq!(kind(x, y), kind(x+1, y-2));
+        assert_eq!(kind(x, y), kind(x-1, y-2));
+
+        assert_ne!(kind(x, y), kind(x+1, y));
+        assert_ne!(kind(x, y), kind(x-1, y));
+        assert_ne!(kind(x, y), kind(x+1, y+1));
+        assert_ne!(kind(x, y), kind(x, y+1));
     }
 }
 
