@@ -105,12 +105,12 @@ impl AI {
         result
     }
 
-    fn search_negamax(&mut self, alpha: Score, beta: Score, depth: isize) -> Score {
+    fn search_negamax(&mut self, ply: isize, alpha: Score, beta: Score, depth: isize) -> Score {
         self.visited_nodes += 1;
 
         // 1. Check if we lost.
         if self.state.won(3-self.state.current_player) {
-            return -Score::max_value()+depth;
+            return -Score::max_value()+ply;
         }
 
         // 2. Check if we ran out of depth and have to evaluate the position staticly.
@@ -148,7 +148,7 @@ impl AI {
                 // skip the check whether this is the first evaluated move.
                 assert!(moves_explored == 0);
                 self.make_move(tt_mov);
-                tt_move_score = -self.search_negamax(ply+1, -beta, -alpha, depth-ONE_PLY+ext_plies, extensions);
+                tt_move_score = -self.search_negamax(ply+1, -beta, -alpha, depth-ONE_PLY);
                 self.unmake_move(tt_mov);
                 moves_explored += 1;
             }
@@ -208,13 +208,13 @@ impl AI {
             // evaluated using a null window and a shallower depth. If the null window evaluation
             // fails high, we retry using the full window.
             if moves_explored == 0 {
-                score = -self.search_negamax(-beta, -alpha, depth-ONE_PLY);
+                score = -self.search_negamax(ply+1, -beta, -alpha, depth-ONE_PLY);
             } else {
-                let null_score = -self.search_negamax(-alpha-1, -alpha, depth-ONE_PLY*5/3);
                 self.pv_nullsearches += 1;
+                let null_score = -self.search_negamax(ply+1, -alpha-1, -alpha, depth-ONE_PLY*5/3);
                 if null_score > alpha {
-                    score = -self.search_negamax(-beta, -alpha, depth-ONE_PLY);
                     self.pv_failed_nullsearches += 1;
+                    score = -self.search_negamax(ply+1, -beta, -alpha, depth-ONE_PLY);
                 } else {
                     score = null_score;
                 }
@@ -413,13 +413,13 @@ impl AI {
                 self.make_move(mov);
                 let v;
                 if moves_explored == 0 {
-                    v = -self.search_negamax(-beta, -alpha, d*ONE_PLY);
+                    v = -self.search_negamax(1, -beta, -alpha, d*ONE_PLY);
                 } else {
-                    let null_v = -self.search_negamax(-alpha-1, -alpha, d*ONE_PLY-ONE_PLY*5/3);
                     self.pv_nullsearches += 1;
+                    let null_v = -self.search_negamax(1, -alpha-1, -alpha, d*ONE_PLY-ONE_PLY*5/3);
                     if null_v > alpha {
-                        v = -self.search_negamax(-beta, -alpha, d*ONE_PLY);
                         self.pv_failed_nullsearches += 1;
+                        v = -self.search_negamax(1, -beta, -alpha, d*ONE_PLY);
                     } else {
                         v = null_v;
                     }
