@@ -192,25 +192,7 @@ impl AI {
         //    move ordering score above). If we did not get a beta cutoff during these 8 moves, we
         //    try the remaining moves in any order because the move ordering seems bad and we give
         //    up sorting.
-        let mut moves = self.possible_moves();
-        let num_moves = moves.len();
-        for i in 0..num_moves {
-            if moves_explored < 8 {
-                let mut max_i = i;
-                let mut max_move_score = score_move_order(moves[max_i]);
-
-                for j in i+1..num_moves {
-                    let move_score = score_move_order(moves[j]);
-                    if move_score > max_move_score {
-                        max_i = j;
-                        max_move_score = move_score;
-                    }
-                }
-
-                moves.swap(i, max_i);
-            }
-
-            let mov = moves[i];
+        for mov in self.possible_moves().order(8, score_move_order) {
             self.internal_make_move(mov);
             let score;
 
@@ -588,6 +570,58 @@ impl TranspositionTable {
         }
 
         self.table[hash % TT_SIZE] = Some((state, transposition));
+    }
+}
+
+trait MoveList {
+    fn order<F>(self, n: usize, score_fn: F) -> OrderedMovesIterator<F> where F: Fn(Move) -> Score;
+}
+
+impl MoveList for Vec<Move> {
+    fn order<F>(self, n: usize, score_fn: F) -> OrderedMovesIterator<F> where F: Fn(Move) -> Score {
+        OrderedMovesIterator {
+            moves: self,
+            index: 0,
+            n,
+            score_fn,
+        }
+    }
+}
+
+struct OrderedMovesIterator<F> {
+    moves: Vec<Move>,
+    n: usize,
+    index: usize,
+    score_fn: F,
+}
+
+impl<F> Iterator for OrderedMovesIterator<F> where F: Fn(Move) -> Score {
+    type Item = Move;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index == self.moves.len() {
+            return None;
+        }
+
+        if self.index < self.n {
+            let num_moves = self.moves.len();
+            let mut max_i = self.index;
+            let mut max_move_score = (self.score_fn)(self.moves[max_i]);
+
+            for j in self.index+1..num_moves {
+                let move_score = (self.score_fn)(self.moves[j]);
+                if move_score > max_move_score {
+                    max_i = j;
+                    max_move_score = move_score;
+                }
+            }
+
+            self.moves.swap(self.index, max_i);
+        }
+
+        let mov = self.moves[self.index];
+        self.index += 1;
+        Some(mov)
     }
 }
 
