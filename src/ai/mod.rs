@@ -431,20 +431,54 @@ impl AI {
         println!("Search depth:  {}", depth);
         let start = ::std::time::Instant::now();
         let mut moves = self.possible_moves();
+        let num_moves = moves.len();
         let mut score = Score::min_value();
+        let mut root_null_tried = [0; 10];
+        let mut root_researched = [0; 10];
+
+        let current_player = self.state.current_player;
+        let score_move_order = |mov: Move| -> isize {
+            if current_player == 0 {
+                mov.to.1 as isize - mov.from.1 as isize
+            } else {
+                mov.from.1 as isize - mov.to.1 as isize
+            }
+        };
+
+        let mut max_move = moves[0];
+
         for d in 0..depth {
             let mut moves_explored = 0;
             let mut alpha = -Score::max_value();
             let mut beta = Score::max_value();
 
-            moves.sort_by_key(|&mov| {
+            let mut max_score = -Score::max_value();
+            score = Score::min_value();
+
+            for i in 0..num_moves {
+                if moves_explored < 8 {
+                    let mut max_i = i;
+                    let mut max_move_score = score_move_order(moves[max_i]);
+
+                    for j in i+1..num_moves {
+                        let move_score = score_move_order(moves[j]);
+                        if move_score > max_move_score {
+                            max_i = j;
+                            max_move_score = move_score;
+                        }
+                    }
+
+                    moves.swap(i, max_i);
+                }
+
+                let mov = moves[i];
                 self.internal_make_move(mov);
                 let v;
                 if moves_explored == 0 {
                     v = -self.search_negamax(1, -beta, -alpha, d*ONE_PLY);
                 } else {
                     self.pv_nullsearches += 1;
-                    let null_v = -self.search_negamax(1, -alpha-1, -alpha, d*ONE_PLY-ONE_PLY*5/3);
+                    let null_v = -self.search_negamax(1, -alpha-1, -alpha, d*ONE_PLY);
                     if null_v > alpha {
                         self.pv_failed_nullsearches += 1;
                         v = -self.search_negamax(1, -beta, -alpha, d*ONE_PLY);
@@ -455,11 +489,15 @@ impl AI {
                 self.internal_unmake_move(mov);
                 moves_explored += 1;
 
-                alpha = ::std::cmp::max(alpha, v);
+                if v > alpha {
+                    max_move = mov;
+                    max_score = v;
+                    alpha = v;
+                }
 
                 score = ::std::cmp::max(alpha, score);
-                -v
-            });
+
+            }
         }
 
         let end = ::std::time::Instant::now();
@@ -496,7 +534,7 @@ impl AI {
         println!("Score: {}", score);
         println!("");
 
-        moves[0]
+        max_move
     }
 }
 
