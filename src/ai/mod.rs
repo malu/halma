@@ -83,11 +83,21 @@ impl AI {
     }
 
     pub fn make_move(&mut self, mov: Move) {
+        self.internal_make_move(mov);
+        self.state.ply += 1;
+    }
+
+    fn internal_make_move(&mut self, mov: Move) {
         self.update_hash(mov);
         self.state.move_piece(mov);
     }
 
     pub fn unmake_move(&mut self, mov: Move) {
+        self.internal_unmake_move(mov);
+        self.state.ply -= 1;
+    }
+
+    fn internal_unmake_move(&mut self, mov: Move) {
         self.state.move_piece(mov.inverse());
         self.update_hash(mov.inverse());
     }
@@ -147,9 +157,9 @@ impl AI {
                 // There is no possible path in which we evaluate another move first. Hence we can
                 // skip the check whether this is the first evaluated move.
                 assert!(moves_explored == 0);
-                self.make_move(tt_mov);
+                self.internal_make_move(tt_mov);
                 tt_move_score = -self.search_negamax(ply+1, -beta, -alpha, depth-ONE_PLY);
-                self.unmake_move(tt_mov);
+                self.internal_unmake_move(tt_mov);
                 moves_explored += 1;
             }
 
@@ -201,7 +211,7 @@ impl AI {
             }
 
             let mov = moves[i];
-            self.make_move(mov);
+            self.internal_make_move(mov);
             let score;
 
             // Only the first move is evaluated with maximum depth. All other moves are first
@@ -219,7 +229,7 @@ impl AI {
                     score = null_score;
                 }
             }
-            self.unmake_move(mov);
+            self.internal_unmake_move(mov);
             moves_explored += 1;
 
             if score >= beta {
@@ -372,6 +382,7 @@ impl AI {
             evaluation,
             best_move: best_move.unwrap(),
             depth,
+            ply: self.state.ply,
         };
 
         let old = self.transpositions.get(self.hash, self.state);
@@ -380,11 +391,14 @@ impl AI {
             return;
         }
 
-        if old.unwrap().depth > depth {
-            return;
+        if old.unwrap().ply + 6 < self.state.ply {
+            self.transpositions.insert(self.hash, self.state, transposition);
         }
 
-        self.transpositions.insert(self.hash, self.state, transposition);
+        if old.unwrap().depth <= depth {
+            self.transpositions.insert(self.hash, self.state, transposition);
+        }
+
     }
 
     fn get_transposition(&mut self, alpha: Score, beta: Score, depth: isize) -> Option<(Option<Score>, Move)> {
@@ -442,7 +456,7 @@ impl AI {
             let mut beta = Score::max_value();
 
             moves.sort_by_key(|&mov| {
-                self.make_move(mov);
+                self.internal_make_move(mov);
                 let v;
                 if moves_explored == 0 {
                     v = -self.search_negamax(1, -beta, -alpha, d*ONE_PLY);
@@ -456,7 +470,7 @@ impl AI {
                         v = null_v;
                     }
                 }
-                self.unmake_move(mov);
+                self.internal_unmake_move(mov);
                 moves_explored += 1;
 
                 alpha = ::std::cmp::max(alpha, v);
@@ -516,6 +530,7 @@ struct Transposition {
     evaluation: Evaluation,
     best_move: Move,
     depth: isize,
+    ply: usize,
 }
 
 const TT_BITS: usize = 16;

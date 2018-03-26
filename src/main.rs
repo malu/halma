@@ -49,6 +49,7 @@ pub const BOARD_HEIGHT: u8 = 17;
 #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
 pub struct GameState {
     board: [[Tile; BOARD_HEIGHT as usize]; BOARD_WIDTH as usize],
+    ply: usize,
     current_player: u8,
 }
 
@@ -212,6 +213,7 @@ impl Default for GameState {
     fn default() -> Self {
         let mut state = GameState {
             board: [[Tile::Invalid; BOARD_HEIGHT as usize]; BOARD_WIDTH as usize],
+            ply: 0,
             current_player: 0,
         };
 
