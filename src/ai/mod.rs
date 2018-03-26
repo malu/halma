@@ -72,7 +72,7 @@ impl AI {
     fn update_hash(&mut self, mov: Move) {
         let from;
         let to;
-        if self.state.current_player == 1 {
+        if self.state.current_player == 0 {
             from = self.hasher.tile_hashes[mov.from.0 as usize][mov.from.1 as usize].0;
             to = self.hasher.tile_hashes[mov.to.0 as usize][mov.to.1 as usize].0;
         } else {
@@ -109,7 +109,7 @@ impl AI {
         self.visited_nodes += 1;
 
         // 1. Check if we lost.
-        if self.state.won(3-self.state.current_player) {
+        if self.state.won(1-self.state.current_player) {
             return -Score::max_value()+ply;
         }
 
@@ -171,7 +171,7 @@ impl AI {
         // We score the moves (for ordering purposes) by how far they advance along the board.
         let current_player = self.state.current_player;
         let score_move_order = |mov: Move| -> isize {
-            if current_player == 1 {
+            if current_player == 0 {
                 mov.to.1 as isize - mov.from.1 as isize
             } else {
                 mov.from.1 as isize - mov.to.1 as isize
@@ -251,112 +251,112 @@ impl AI {
 
         let mut score = 0.0;
         let score_dist_last_piece = {
+            let mut p0_dist = 0;
             let mut p1_dist = 0;
-            let mut p2_dist = 0;
 
             for x in 0..BOARD_WIDTH as i8 {
                 for y in 0..BOARD_HEIGHT as i8 {
-                    if self.state.get(x, y) == Tile::Player(1) {
-                        p1_dist = ::std::cmp::max(p1_dist, BOARD_HEIGHT as i8 -1-y);
-                    } else if self.state.get(x, y) == Tile::Player(2) {
-                        p2_dist = ::std::cmp::max(p2_dist, y);
+                    if self.state.get(x, y) == Tile::Player(0) {
+                        p0_dist = ::std::cmp::max(p0_dist, BOARD_HEIGHT as i8 -1-y);
+                    } else if self.state.get(x, y) == Tile::Player(1) {
+                        p1_dist = ::std::cmp::max(p1_dist, y);
                     }
                 }
             }
 
-            (p2_dist-p1_dist) as f32
+            (p1_dist-p0_dist) as f32
         };
         score += score_dist_last_piece;
 
         let score_dist_first_piece = {
+            let mut p0_dist = 0;
             let mut p1_dist = 0;
-            let mut p2_dist = 0;
 
             for x in 0..BOARD_WIDTH as i8 {
                 for y in 0..BOARD_HEIGHT as i8 {
-                    if self.state.get(x, y) == Tile::Player(1) {
-                        p1_dist = ::std::cmp::min(p1_dist, BOARD_HEIGHT as i8 -1-y);
-                    } else if self.state.get(x, y) == Tile::Player(2) {
-                        p2_dist = ::std::cmp::min(p2_dist, y);
+                    if self.state.get(x, y) == Tile::Player(0) {
+                        p0_dist = ::std::cmp::min(p0_dist, BOARD_HEIGHT as i8 -1-y);
+                    } else if self.state.get(x, y) == Tile::Player(1) {
+                        p1_dist = ::std::cmp::min(p1_dist, y);
                     }
                 }
             }
 
-            -(p2_dist-p1_dist) as f32
+            -(p1_dist-p0_dist) as f32
         };
         score += score_dist_first_piece/3.;
 
         let score_dist_avg_piece = {
+            let mut p0_total_dist: i64 = 0;
             let mut p1_total_dist: i64 = 0;
-            let mut p2_total_dist: i64 = 0;
 
             for x in 0..BOARD_WIDTH as i8 {
                 for y in 0..BOARD_HEIGHT as i8 {
-                    if self.state.get(x, y) == Tile::Player(1) {
-                        p1_total_dist += BOARD_HEIGHT as i64 - 1 - y as i64;
-                    } else if self.state.get(x, y) == Tile::Player(2) {
-                        p2_total_dist += y as i64;
+                    if self.state.get(x, y) == Tile::Player(0) {
+                        p0_total_dist += BOARD_HEIGHT as i64 - 1 - y as i64;
+                    } else if self.state.get(x, y) == Tile::Player(1) {
+                        p1_total_dist += y as i64;
                     }
                 }
             }
 
-            (p2_total_dist-p1_total_dist) as f32 / 15.0
+            (p1_total_dist-p0_total_dist) as f32 / 15.0
         };
         score += score_dist_avg_piece;
 
         let score_center = {
+            let mut p0_center: i64 = 0;
             let mut p1_center: i64 = 0;
-            let mut p2_center: i64 = 0;
 
             for x in 0..BOARD_WIDTH as i8 {
                 for y in 0..BOARD_HEIGHT as i8 {
                     if x < 4 || x > 8 + y%2 {
-                        if self.state.get(x, y) == Tile::Player(1) {
+                        if self.state.get(x, y) == Tile::Player(0) {
+                            p0_center -= ::std::cmp::min(4-x, x-(8+y%2)) as i64;
+                        } else if self.state.get(x, y) == Tile::Player(1) {
                             p1_center -= ::std::cmp::min(4-x, x-(8+y%2)) as i64;
-                        } else if self.state.get(x, y) == Tile::Player(2) {
-                            p2_center -= ::std::cmp::min(4-x, x-(8+y%2)) as i64;
                         }
                     }
                 }
             }
 
-            (p2_center-p1_center) as f32 / 15.0
+            (p1_center-p0_center) as f32 / 15.0
         };
         score += score_center/3.0;
 
         let score_kinds = {
+            let mut p0_kinds = [0; 4];
             let mut p1_kinds = [0; 4];
-            let mut p2_kinds = [0; 4];
 
+            let mut p0_target = [0; 4];
             let mut p1_target = [0; 4];
-            let mut p2_target = [0; 4];
 
             for x in 0..BOARD_WIDTH as i8 {
                 for y in 0..BOARD_HEIGHT as i8 {
                     if y < 5 && 4 <= x && x <= 8 {
-                        p2_target[kind(x, y)] += 1;
-                    }
-
-                    if y > 11 && 4 <= x && x <= 8 {
                         p1_target[kind(x, y)] += 1;
                     }
 
-                    if self.state.get(x, y) == Tile::Player(1) {
+                    if y > 11 && 4 <= x && x <= 8 {
+                        p0_target[kind(x, y)] += 1;
+                    }
+
+                    if self.state.get(x, y) == Tile::Player(0) {
+                        p0_kinds[kind(x, y)] += 1;
+                    } else if self.state.get(x, y) == Tile::Player(1) {
                         p1_kinds[kind(x, y)] += 1;
-                    } else if self.state.get(x, y) == Tile::Player(2) {
-                        p2_kinds[kind(x, y)] += 1;
                     }
                 }
             }
 
+            let p0: isize = p0_kinds.iter().zip(&p0_target).map(|(&have, &target): (&isize, &isize)| (target-have).abs()).sum();
             let p1: isize = p1_kinds.iter().zip(&p1_target).map(|(&have, &target): (&isize, &isize)| (target-have).abs()).sum();
-            let p2: isize = p2_kinds.iter().zip(&p2_target).map(|(&have, &target): (&isize, &isize)| (target-have).abs()).sum();
 
-            (p2 - p1) as f32
+            (p1 - p0) as f32
         };
         score += score_kinds/6.;
 
-        if self.state.current_player == 1 {
+        if self.state.current_player == 0 {
             (score*1_000.0) as Score
         } else {
             (-score*1_000.0) as Score

@@ -37,8 +37,8 @@ impl Tile {
 
 fn player_color(id: u8) -> Color {
     match id {
-        1 => Color::RGB(255, 0, 0),
-        2 => Color::RGB(0, 0, 255),
+        0 => Color::RGB(255, 0, 0),
+        1 => Color::RGB(0, 0, 255),
         _ => unimplemented!()
     }
 }
@@ -99,7 +99,7 @@ impl GameState {
     }
 
     pub fn won(&self, player: u8) -> bool {
-        if player == 1 {
+        if player == 0 {
             for x in 4..9 {
                 for y in 12..BOARD_HEIGHT as i8 {
                     if !self.is_valid_location(x, y) {
@@ -113,7 +113,7 @@ impl GameState {
             }
 
             return true;
-        } else if player == 2 {
+        } else if player == 1 {
             for x in 4..9 {
                 for y in 0..5 {
                     if !self.is_valid_location(x, y) {
@@ -179,7 +179,7 @@ impl GameState {
         let from = self.get(fx, fy);
         self.set(tx, ty, from);
         self.set(fx, fy, Tile::Empty);
-        self.current_player = 3-self.current_player;
+        self.current_player = 1-self.current_player;
     }
 }
 
@@ -203,7 +203,7 @@ impl Game {
             let from = self.state.get(tx, ty);
             self.state.set(fx, fy, from);
             self.state.set(tx, ty, Tile::Empty);
-            self.state.current_player = 3-self.state.current_player;
+            self.state.current_player = 1-self.state.current_player;
         }
     }
 }
@@ -212,7 +212,7 @@ impl Default for GameState {
     fn default() -> Self {
         let mut state = GameState {
             board: [[Tile::Invalid; BOARD_HEIGHT as usize]; BOARD_WIDTH as usize],
-            current_player: 1,
+            current_player: 0,
         };
 
         for y in 0..BOARD_HEIGHT as i8 {
@@ -221,9 +221,9 @@ impl Default for GameState {
                     continue;
                 }
                 if y < 5 && (x-6).abs() < 3 {
-                    state.set(x, y, Tile::Player(1));
+                    state.set(x, y, Tile::Player(0));
                 } else if y > 11  && (x-6).abs() < 3 {
-                    state.set(x, y, Tile::Player(2));
+                    state.set(x, y, Tile::Player(1));
                 } else {
                     state.set(x, y, Tile::Empty);
                 }
@@ -305,8 +305,8 @@ fn main() {
     let mut selection = None;
     let mut display_moves = false;
 
+    let mut ai0 = AI::new(game.state);
     let mut ai1 = AI::new(game.state);
-    let mut ai2 = AI::new(game.state);
     let mut events = sdl.event_pump().unwrap();
     'mainloop: loop {
         canvas.set_draw_color(Color::RGB(224, 224, 224));
@@ -321,14 +321,14 @@ fn main() {
                 Event::KeyDown { keycode: Some(Keycode::A), .. } => {
                     let depth = 4;
                     let mov;
-                    if game.state.current_player == 1 {
-                        mov = ai1.calculate_move(depth);
+                    if game.state.current_player == 0 {
+                        mov = ai0.calculate_move(depth);
                     } else {
-                        mov = ai2.calculate_move(depth);
+                        mov = ai1.calculate_move(depth);
                     }
                     game.move_piece(mov);
+                    ai0.make_move(mov);
                     ai1.make_move(mov);
-                    ai2.make_move(mov);
                 }
                 Event::MouseMotion { x, y, .. } => {
                     mouse_x = x;
@@ -349,7 +349,10 @@ fn main() {
                         Some((x, y)) => {
                             if let Some((bx, by)) = nearest_board_position(&game.state, mouse_x, mouse_y) {
                                 if game.state.reachable_from(x, y).contains(&(bx, by)) {
-                                    game.move_piece(Move { from: (x, y), to: (bx, by) });
+                                    let mov = Move { from: (x, y), to: (bx, by) };
+                                    game.move_piece(mov);
+                                    ai0.make_move(mov);
+                                    ai1.make_move(mov);
                                 }
                             }
 
