@@ -307,7 +307,10 @@ fn main() {
 
     let mut ai0 = AI::new(game.state);
     let mut ai1 = AI::new(game.state);
+    let mut autoplay0 = true;
+    let mut autoplay1 = true;
     let mut events = sdl.event_pump().unwrap();
+    let depth = 6;
     'mainloop: loop {
         canvas.set_draw_color(Color::RGB(224, 224, 224));
         canvas.clear();
@@ -319,7 +322,6 @@ fn main() {
                 Event::KeyDown { keycode: Some(Keycode::M), .. } => display_moves = !display_moves,
                 Event::KeyDown { keycode: Some(Keycode::U), .. } => game.undo(),
                 Event::KeyDown { keycode: Some(Keycode::A), .. } => {
-                    let depth = 4;
                     let mov;
                     if game.state.current_player == 0 {
                         mov = ai0.calculate_move(depth);
@@ -362,6 +364,20 @@ fn main() {
                 }
                 _ => {}
             }
+        }
+        
+        if autoplay0 && game.state.current_player == 0 {
+            let mov = ai0.calculate_move(depth);
+            game.move_piece(mov);
+            ai0.make_move(mov);
+            ai1.make_move(mov);
+        }
+
+        if autoplay1 && game.state.current_player == 1 {
+            let mov = ai1.calculate_move(depth);
+            game.move_piece(mov);
+            ai0.make_move(mov);
+            ai1.make_move(mov);
         }
 
         draw_board(&mut canvas, &game.state);
@@ -417,5 +433,13 @@ fn main() {
 
         canvas.present();
         ::std::thread::sleep(::std::time::Duration::new(0, 1_000_000_000u32 / 60));
+
+        if game.state.won(0) {
+            autoplay0 = false;
+            autoplay1 = false;
+        } else if game.state.won(1) {
+            autoplay0 = false;
+            autoplay1 = false;
+        }
     }
 }
