@@ -315,70 +315,19 @@ impl AI {
 
         //println!("Search depth:  {}", depth);
         let start = ::std::time::Instant::now();
-        let mut moves = self.possible_moves();
-        let num_moves = moves.len();
-        let mut score = Score::min_value();
+        let alpha = -Score::max_value();
+        let beta = Score::max_value();
+        for d in 1..depth+1 {
+            self.search_negamax(0, alpha, beta, d*ONE_PLY);
+        }
 
-        let current_player = self.state.current_player;
-        let score_move_order = |mov: Move| -> isize {
-            if current_player == 0 {
-                mov.to.1 as isize - mov.from.1 as isize
-            } else {
-                mov.from.1 as isize - mov.to.1 as isize
-            }
-        };
-
-        let mut max_move = moves[0];
-
-        for d in 1..depth {
-            let mut moves_explored = 0;
-            let mut alpha = -Score::max_value();
-            let mut beta = Score::max_value();
-
-            score = Score::min_value();
-
-            for i in 0..num_moves {
-                if moves_explored < 8 {
-                    let mut max_i = i;
-                    let mut max_move_score = score_move_order(moves[max_i]);
-
-                    for j in i+1..num_moves {
-                        let move_score = score_move_order(moves[j]);
-                        if move_score > max_move_score {
-                            max_i = j;
-                            max_move_score = move_score;
-                        }
-                    }
-
-                    moves.swap(i, max_i);
-                }
-
-                let mov = moves[i];
-                self.internal_make_move(mov);
-                let v;
-                if moves_explored == 0 {
-                    v = -self.search_negamax(1, -beta, -alpha, d*ONE_PLY);
-                } else {
-                    self.pv_nullsearches += 1;
-                    let null_v = -self.search_negamax(1, -alpha-1, -alpha, d*ONE_PLY);
-                    if null_v > alpha {
-                        self.pv_failed_nullsearches += 1;
-                        v = -self.search_negamax(1, -beta, -alpha, d*ONE_PLY);
-                    } else {
-                        v = null_v;
-                    }
-                }
-                self.internal_unmake_move(mov);
-                moves_explored += 1;
-
-                if v > alpha {
-                    max_move = mov;
-                    alpha = v;
-                }
-
-                score = ::std::cmp::max(alpha, score);
-
-            }
+        let score;
+        let mov;
+        if let Some((Some(pvscore), pvmove)) = self.get_transposition(alpha, beta, depth*ONE_PLY) {
+            score = pvscore;
+            mov = pvmove;
+        } else {
+            panic!("No PV entry in transposition table");
         }
 
         let end = ::std::time::Instant::now();
@@ -417,7 +366,7 @@ impl AI {
             println!("");
         }
 
-        max_move
+        mov
     }
 }
 
