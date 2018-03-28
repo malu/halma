@@ -98,26 +98,26 @@ impl GameState {
         return true;
     }
 
-    pub fn reachable_from(&self, x: i8, y: i8) -> Vec<(i8, i8)> {
-        let mut result = Vec::new();
-        let mut jumping_targets = vec![(x, y)];
+    pub fn moves_from(&self, x: i8, y: i8) -> Vec<Move> {
+        let mut result = Vec::with_capacity(128);
+        let mut jumping_targets = Vec::with_capacity(128);
+        jumping_targets.push((x, y));
 
-        while !jumping_targets.is_empty() {
-            let (sx, sy) = jumping_targets.pop().unwrap();
-
+        while let Some((sx, sy)) = jumping_targets.pop() {
             for &(dx, dy, jx, jy) in &[(-1, 0, -2, 0), (1, 0, 2, 0), (-y%2+1, 1, 1, 2), (-y%2, 1, -1, 2), (-y%2+1, -1, 1, -2), (-y%2, -1, -1, -2)] {
                 if !self.is_valid_location(sx+dx, sy+dy) || !self.is_valid_location(sx+jx, sy+jy) {
                     continue;
                 }
 
                 if let Tile::Player(_) = self.get(sx+dx, sy+dy) {
-                    if self.get(sx+jx, sy+jy) == Tile::Empty && !jumping_targets.contains(&(sx+jx, sy+jy)) && !result.contains(&(sx+jx, sy+jy)) {
+                    if self.get(sx+jx, sy+jy) == Tile::Empty
+                        && !jumping_targets.contains(&(sx+jx, sy+jy))
+                        && !result.contains(&Move { from: (x, y), to: (sx+jx, sy+jy)}) {
                         jumping_targets.push((sx+jx, sy+jy));
+                        result.push(Move { from: (x, y), to: (sx+jx, sy+jy) });
                     }
                 }
             }
-
-            result.push((sx, sy));
         }
 
         for &(dx, dy) in &[(-1, 0), (1, 0), (-y%2+1, 1), (-y%2, 1), (-y%2+1, -1), (-y%2, -1)] {
@@ -126,13 +126,11 @@ impl GameState {
             }
 
             if self.get(x+dx, y+dy) == Tile::Empty {
-                result.push((x+dx, y+dy));
+                result.push(Move { from: (x, y), to: (x+dx, y+dy) });
             }
         }
 
-
-        result.swap_remove(0);
-        assert!(result.iter().all(|&p| p != (x, y)));
+        assert!(result.iter().all(|&Move { from, to }| from != to));
         result
     }
 

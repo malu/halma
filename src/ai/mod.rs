@@ -87,7 +87,7 @@ impl AI {
         for x in 0..BOARD_WIDTH as i8 {
             for y in 0..BOARD_HEIGHT as i8 {
                 if self.state.get(x, y) == Tile::Player(self.state.current_player) {
-                    result.extend(self.state.reachable_from(x, y).into_iter().map(|to| Move { from: (x, y), to } ));
+                    result.append(&mut self.state.moves_from(x, y));
                 }
             }
         }

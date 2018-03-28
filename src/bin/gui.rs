@@ -154,7 +154,7 @@ fn main() {
                         }
                         Some((x, y)) => {
                             if let Some((bx, by)) = nearest_board_position(game.state(), mouse_x, mouse_y) {
-                                if game.state().reachable_from(x, y).contains(&(bx, by)) {
+                                if game.state().moves_from(x, y).contains(&Move { from: (x, y), to: (bx, by) }) {
                                     let mov = Move { from: (x, y), to: (bx, by) };
                                     game.move_piece(mov);
                                     ai0.make_move(mov);
@@ -200,7 +200,7 @@ fn main() {
                 canvas.draw_rect(sdl2::rect::Rect::new(screen_x-6, screen_y-6, 12, 12)).unwrap();
             }
 
-            for (rx, ry) in game.state().reachable_from(x, y) {
+            for Move { from: _, to: (rx, ry) } in game.state().moves_from(x, y) {
                 let (screen_x, screen_y) = board_space_to_screen_space(rx, ry);
                 canvas.set_draw_color(Color::RGB(0, 0, 0));
                 canvas.draw_rect(sdl2::rect::Rect::new(screen_x-6, screen_y-6, 12, 12)).unwrap();
