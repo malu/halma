@@ -99,38 +99,36 @@ impl GameState {
         self.board[x as usize][y as usize]
     }
 
-    pub fn won(&self, player: u8) -> bool {
+    pub fn targets(&self, player: u8) -> &[(i8, i8)] {
         if player == 0 {
-            for x in 4..9 {
-                for y in 12..BOARD_HEIGHT as i8 {
-                    if !self.is_valid_location(x, y) {
-                        continue;
-                    }
-
-                    if self.get(x, y) != Tile::Player(player) {
-                        return false;
-                    }
-                }
-            }
-
-            return true;
+            &[
+                (12, 4), (12, 5), (12, 6), (12, 7), (12, 8),
+                (13, 5), (13, 6), (13, 7), (13, 8),
+                (14, 5), (14, 6), (14, 7),
+                (15, 6), (15, 7),
+                (16, 6),
+            ]
         } else if player == 1 {
-            for x in 4..9 {
-                for y in 0..5 {
-                    if !self.is_valid_location(x, y) {
-                        continue;
-                    }
+            &[
+                (0, 6),
+                (1, 6), (1, 7),
+                (2, 5), (2, 6), (2, 7),
+                (3, 5), (3, 6), (3, 7), (3, 8),
+                (4, 4), (4, 5), (4, 6), (4, 7), (4, 8),
+            ]
+        } else {
+            &[]
+        }
+    }
 
-                    if self.get(x, y) != Tile::Player(player) {
-                        return false;
-                    }
-                }
+    pub fn won(&self, player: u8) -> bool {
+        for &(x, y) in self.targets(player) {
+            if self.get(x, y) != Tile::Player(player) {
+                return false;
             }
-
-            return true;
         }
 
-        false
+        return true;
     }
 
     fn reachable_from(&self, x: i8, y: i8) -> Vec<(i8, i8)> {
@@ -307,12 +305,16 @@ fn main() {
     let mut selection = None;
     let mut display_moves = false;
 
-    let mut ai0 = AI::new(game.state);
-    let mut ai1 = AI::new(game.state);
-    let mut autoplay0 = true;
-    let mut autoplay1 = true;
     let mut events = sdl.event_pump().unwrap();
     let depth = 6;
+
+    let mut ai0 = AI::new(game.state);
+    ai0.print_statistics = true;
+    let mut ai1 = AI::new(game.state);
+
+    let mut autoplay0 = true;
+    let mut autoplay1 = true;
+
     'mainloop: loop {
         canvas.set_draw_color(Color::RGB(224, 224, 224));
         canvas.clear();
@@ -373,9 +375,7 @@ fn main() {
             game.move_piece(mov);
             ai0.make_move(mov);
             ai1.make_move(mov);
-        }
-
-        if autoplay1 && game.state.current_player == 1 {
+        } else if autoplay1 && game.state.current_player == 1 {
             let mov = ai1.calculate_move(depth);
             game.move_piece(mov);
             ai0.make_move(mov);

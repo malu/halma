@@ -34,7 +34,9 @@ impl Default for IncrementalHasher {
 
 pub struct AI {
     pub state: GameState,
+    pub print_statistics: bool,
     transpositions: TranspositionTable,
+    evaluation_cache: EvaluationCache,
     visited_nodes: usize,
     visited_leaf_nodes: usize,
     beta_cutoffs: usize,
@@ -53,6 +55,8 @@ impl AI {
     pub fn new(state: GameState) -> AI {
         AI {
             state,
+            print_statistics: false,
+            evaluation_cache: EvaluationCache::from(&state),
             transpositions: TranspositionTable::default(),
             visited_nodes: 0,
             visited_leaf_nodes: 0,
@@ -88,6 +92,7 @@ impl AI {
     }
 
     fn internal_make_move(&mut self, mov: Move) {
+        self.evaluation_cache.update(self.state.current_player, mov);
         self.update_hash(mov);
         self.state.move_piece(mov);
     }
@@ -99,6 +104,7 @@ impl AI {
 
     fn internal_unmake_move(&mut self, mov: Move) {
         self.state.move_piece(mov.inverse());
+        self.evaluation_cache.update(self.state.current_player, mov.inverse());
         self.update_hash(mov.inverse());
     }
 
@@ -241,117 +247,23 @@ impl AI {
     fn evaluate_position(&mut self) -> Score {
         self.visited_leaf_nodes += 1;
 
-        let mut score = 0.0;
-        let score_dist_last_piece = {
-            let mut p0_dist = 0;
-            let mut p1_dist = 0;
-
-            for x in 0..BOARD_WIDTH as i8 {
-                for y in 0..BOARD_HEIGHT as i8 {
-                    if self.state.get(x, y) == Tile::Player(0) {
-                        p0_dist = ::std::cmp::max(p0_dist, BOARD_HEIGHT as i8 -1-y);
-                    } else if self.state.get(x, y) == Tile::Player(1) {
-                        p1_dist = ::std::cmp::max(p1_dist, y);
-                    }
-                }
-            }
-
-            (p1_dist-p0_dist) as f32
-        };
+        let mut score = 0;
+        let score_dist_last_piece = self.evaluation_cache.score_dist_last_piece();
         score += score_dist_last_piece;
 
-        let score_dist_first_piece = {
-            let mut p0_dist = 0;
-            let mut p1_dist = 0;
+        let score_total_distance = self.evaluation_cache.score_total_distance();
+        score += score_total_distance;
 
-            for x in 0..BOARD_WIDTH as i8 {
-                for y in 0..BOARD_HEIGHT as i8 {
-                    if self.state.get(x, y) == Tile::Player(0) {
-                        p0_dist = ::std::cmp::min(p0_dist, BOARD_HEIGHT as i8 -1-y);
-                    } else if self.state.get(x, y) == Tile::Player(1) {
-                        p1_dist = ::std::cmp::min(p1_dist, y);
-                    }
-                }
-            }
+        let score_center = self.evaluation_cache.score_centralization();
+        score += score_center/3;
 
-            -(p1_dist-p0_dist) as f32
-        };
-        score += score_dist_first_piece/3.;
-
-        let score_dist_avg_piece = {
-            let mut p0_total_dist: i64 = 0;
-            let mut p1_total_dist: i64 = 0;
-
-            for x in 0..BOARD_WIDTH as i8 {
-                for y in 0..BOARD_HEIGHT as i8 {
-                    if self.state.get(x, y) == Tile::Player(0) {
-                        p0_total_dist += BOARD_HEIGHT as i64 - 1 - y as i64;
-                    } else if self.state.get(x, y) == Tile::Player(1) {
-                        p1_total_dist += y as i64;
-                    }
-                }
-            }
-
-            (p1_total_dist-p0_total_dist) as f32 / 15.0
-        };
-        score += score_dist_avg_piece;
-
-        let score_center = {
-            let mut p0_center: i64 = 0;
-            let mut p1_center: i64 = 0;
-
-            for x in 0..BOARD_WIDTH as i8 {
-                for y in 0..BOARD_HEIGHT as i8 {
-                    if x < 4 || x > 8 + y%2 {
-                        if self.state.get(x, y) == Tile::Player(0) {
-                            p0_center -= ::std::cmp::min(4-x, x-(8+y%2)) as i64;
-                        } else if self.state.get(x, y) == Tile::Player(1) {
-                            p1_center -= ::std::cmp::min(4-x, x-(8+y%2)) as i64;
-                        }
-                    }
-                }
-            }
-
-            (p1_center-p0_center) as f32 / 15.0
-        };
-        score += score_center/3.0;
-
-        let score_kinds = {
-            let mut p0_kinds = [0; 4];
-            let mut p1_kinds = [0; 4];
-
-            let mut p0_target = [0; 4];
-            let mut p1_target = [0; 4];
-
-            for x in 0..BOARD_WIDTH as i8 {
-                for y in 0..BOARD_HEIGHT as i8 {
-                    if y < 5 && 4 <= x && x <= 8 {
-                        p1_target[kind(x, y)] += 1;
-                    }
-
-                    if y > 11 && 4 <= x && x <= 8 {
-                        p0_target[kind(x, y)] += 1;
-                    }
-
-                    if self.state.get(x, y) == Tile::Player(0) {
-                        p0_kinds[kind(x, y)] += 1;
-                    } else if self.state.get(x, y) == Tile::Player(1) {
-                        p1_kinds[kind(x, y)] += 1;
-                    }
-                }
-            }
-
-            let p0: isize = p0_kinds.iter().zip(&p0_target).map(|(&have, &target): (&isize, &isize)| (target-have).abs()).sum();
-            let p1: isize = p1_kinds.iter().zip(&p1_target).map(|(&have, &target): (&isize, &isize)| (target-have).abs()).sum();
-
-            (p1 - p0) as f32
-        };
-        score += score_kinds/6.;
+        let score_kinds = self.evaluation_cache.score_kinds();
+        score += score_kinds/6;
 
         if self.state.current_player == 0 {
-            (score*1_000.0) as Score
+            score
         } else {
-            (-score*1_000.0) as Score
+            -score
         }
     }
 
@@ -428,13 +340,11 @@ impl AI {
         self.transpositions.update = 0;
         self.moves_explored = [0; 8];
 
-        println!("Search depth:  {}", depth);
+        //println!("Search depth:  {}", depth);
         let start = ::std::time::Instant::now();
         let mut moves = self.possible_moves();
         let num_moves = moves.len();
         let mut score = Score::min_value();
-        let mut root_null_tried = [0; 10];
-        let mut root_researched = [0; 10];
 
         let current_player = self.state.current_player;
         let score_move_order = |mov: Move| -> isize {
@@ -505,34 +415,36 @@ impl AI {
         let secs = elapsed.as_secs() as f64 + elapsed.subsec_nanos() as f64 / 1_000_000_000.0;
         let interior_nodes = self.visited_nodes - self.visited_leaf_nodes;
         let total_cutoffs = self.tt_cutoffs + self.beta_cutoffs;
-        println!("  nodes | total   {} ({:.3} nodes/s)", self.visited_nodes, self.visited_nodes as f64 / secs);
-        println!("        | leaf    {} ({:.2}%)", self.visited_leaf_nodes, 100.0 * self.visited_leaf_nodes as f64 / self.visited_nodes as f64);
-        println!("        | inner   {} ({:.2}%)", interior_nodes, 100.0 * interior_nodes as f64 / self.visited_nodes as f64);
-        println!("cutoffs | beta    {} ({:.2}%)", self.beta_cutoffs, 100.0 * self.beta_cutoffs as f64 / interior_nodes as f64);
-        println!("        | TT      {} ({:.2}%)", self.tt_cutoffs, 100.0 * self.tt_cutoffs as f64 / interior_nodes as f64);
-        println!("        | total   {} ({:.2}%)", total_cutoffs, 100.0 * total_cutoffs as f64 / interior_nodes as f64);
-        println!("     TT | lookups {}", self.tt_lookups);
-        println!("        | hits    {} ({:.2}%)", self.tt_hits, 100.0 * self.tt_hits as f64 / self.tt_lookups as f64);
-        println!("        | cutoffs {} ({:.2}%)", self.tt_cutoffs, 100.0 * self.tt_cutoffs as f64 / self.tt_hits as f64);
-        println!("        | size    {} ({} MB)", self.transpositions.len(), (self.transpositions.len() * ::std::mem::size_of::<Option<(GameState, Transposition)>>()) / (1024*1024));
-        println!("        | insert  {}", self.transpositions.insertion);
-        println!("        | update  {} ({:.2}%)", self.transpositions.update, 100.0 * self.transpositions.update as f64 / self.transpositions.insertion as f64);
-        println!("        | replace {} ({:.2}%)", self.transpositions.replace, 100.0 * self.transpositions.replace as f64 / self.transpositions.insertion as f64);
-        println!("     PV | 0-wind. {}", self.pv_nullsearches);
-        println!("        | failed  {} ({:.2}%)", self.pv_failed_nullsearches, 100.0 * self.pv_failed_nullsearches  as f64 / self.pv_nullsearches as f64);
-        let total_moves_explored = self.moves_explored.iter().sum::<usize>() as f64;
-        println!("  expl. | 0:  {} ({:.3}%)", self.moves_explored[0], 100.0 * self.moves_explored[0] as f64 / total_moves_explored);
-        println!("        | 1:  {} ({:.3}%)", self.moves_explored[1], 100.0 * self.moves_explored[1] as f64 / total_moves_explored);
-        println!("        | 2:  {} ({:.3}%)", self.moves_explored[2], 100.0 * self.moves_explored[2] as f64 / total_moves_explored);
-        println!("        | 3:  {} ({:.3}%)", self.moves_explored[3], 100.0 * self.moves_explored[3] as f64 / total_moves_explored);
-        println!("        | 4:  {} ({:.3}%)", self.moves_explored[4], 100.0 * self.moves_explored[4] as f64 / total_moves_explored);
-        println!("        | 5:  {} ({:.3}%)", self.moves_explored[5], 100.0 * self.moves_explored[5] as f64 / total_moves_explored);
-        println!("        | 6:  {} ({:.3}%)", self.moves_explored[6], 100.0 * self.moves_explored[6] as f64 / total_moves_explored);
-        println!("        | 7+: {} ({:.3}%)", self.moves_explored[7], 100.0 * self.moves_explored[7] as f64 / total_moves_explored);
-        println!("");
-        println!("Time:  {}:{}", elapsed.as_secs() / 60, (elapsed.as_secs() % 60) as f64 + elapsed.subsec_nanos() as f64 / 1_000_000_000.0);
-        println!("Score: {}", score);
-        println!("");
+        if self.print_statistics {
+            println!("  nodes | total   {} ({:.3} knodes/s)", self.visited_nodes, self.visited_nodes as f64 / secs / 1000.0);
+            println!("        | leaf    {} ({:.2}%)", self.visited_leaf_nodes, 100.0 * self.visited_leaf_nodes as f64 / self.visited_nodes as f64);
+            println!("        | inner   {} ({:.2}%)", interior_nodes, 100.0 * interior_nodes as f64 / self.visited_nodes as f64);
+            println!("cutoffs | beta    {} ({:.2}%)", self.beta_cutoffs, 100.0 * self.beta_cutoffs as f64 / interior_nodes as f64);
+            println!("        | TT      {} ({:.2}%)", self.tt_cutoffs, 100.0 * self.tt_cutoffs as f64 / interior_nodes as f64);
+            println!("        | total   {} ({:.2}%)", total_cutoffs, 100.0 * total_cutoffs as f64 / interior_nodes as f64);
+            println!("     TT | lookups {}", self.tt_lookups);
+            println!("        | hits    {} ({:.2}%)", self.tt_hits, 100.0 * self.tt_hits as f64 / self.tt_lookups as f64);
+            println!("        | cutoffs {} ({:.2}%)", self.tt_cutoffs, 100.0 * self.tt_cutoffs as f64 / self.tt_hits as f64);
+            println!("        | size    {} ({} MB)", self.transpositions.len(), (self.transpositions.len() * ::std::mem::size_of::<Option<(GameState, Transposition)>>()) / (1024*1024));
+            println!("        | insert  {}", self.transpositions.insertion);
+            println!("        | update  {} ({:.2}%)", self.transpositions.update, 100.0 * self.transpositions.update as f64 / self.transpositions.insertion as f64);
+            println!("        | replace {} ({:.2}%)", self.transpositions.replace, 100.0 * self.transpositions.replace as f64 / self.transpositions.insertion as f64);
+            println!("     PV | 0-wind. {}", self.pv_nullsearches);
+            println!("        | failed  {} ({:.2}%)", self.pv_failed_nullsearches, 100.0 * self.pv_failed_nullsearches  as f64 / self.pv_nullsearches as f64);
+            let total_moves_explored = self.moves_explored.iter().sum::<usize>() as f64;
+            println!("  expl. | 0:  {} ({:.3}%)", self.moves_explored[0], 100.0 * self.moves_explored[0] as f64 / total_moves_explored);
+            println!("        | 1:  {} ({:.3}%)", self.moves_explored[1], 100.0 * self.moves_explored[1] as f64 / total_moves_explored);
+            println!("        | 2:  {} ({:.3}%)", self.moves_explored[2], 100.0 * self.moves_explored[2] as f64 / total_moves_explored);
+            println!("        | 3:  {} ({:.3}%)", self.moves_explored[3], 100.0 * self.moves_explored[3] as f64 / total_moves_explored);
+            println!("        | 4:  {} ({:.3}%)", self.moves_explored[4], 100.0 * self.moves_explored[4] as f64 / total_moves_explored);
+            println!("        | 5:  {} ({:.3}%)", self.moves_explored[5], 100.0 * self.moves_explored[5] as f64 / total_moves_explored);
+            println!("        | 6:  {} ({:.3}%)", self.moves_explored[6], 100.0 * self.moves_explored[6] as f64 / total_moves_explored);
+            println!("        | 7+: {} ({:.3}%)", self.moves_explored[7], 100.0 * self.moves_explored[7] as f64 / total_moves_explored);
+            println!("");
+            println!("Time:  {}:{}", elapsed.as_secs() / 60, (elapsed.as_secs() % 60) as f64 + elapsed.subsec_nanos() as f64 / 1_000_000_000.0);
+            println!("Score: {}", score);
+            println!("");
+        }
 
         max_move
     }
@@ -660,6 +572,132 @@ impl<F> Iterator for OrderedMovesIterator<F> where F: Fn(Move) -> Score {
         let mov = self.moves[self.index];
         self.index += 1;
         Some(mov)
+    }
+}
+
+struct EvaluationCache {
+    p0_target_kinds: [i8; 4],
+    p1_target_kinds: [i8; 4],
+    p0_kinds: [i8; 4],
+    p1_kinds: [i8; 4],
+    p0_ys: [i8; BOARD_HEIGHT as usize],
+    p1_ys: [i8; BOARD_HEIGHT as usize],
+    p0_dist: isize,
+    p1_dist: isize,
+    p0_dist_to_center: [i8; BOARD_WIDTH as usize],
+    p1_dist_to_center: [i8; BOARD_WIDTH as usize],
+}
+
+impl<'a> From<&'a GameState> for EvaluationCache {
+    fn from(state: &GameState) -> Self {
+        let mut p0_target_kinds = [0; 4];
+        for &(x, y) in state.targets(0) {
+            p0_target_kinds[kind(x, y)] += 1;
+        }
+
+        let mut p1_target_kinds = [0; 4];
+        for &(x, y) in state.targets(1) {
+            p1_target_kinds[kind(x, y)] += 1;
+        }
+
+        let mut p0_kinds = [0; 4];
+        let mut p1_kinds = [0; 4];
+        let mut p0_ys = [0; BOARD_HEIGHT as usize];
+        let mut p1_ys = [0; BOARD_HEIGHT as usize];
+        let mut p0_dist = 0;
+        let mut p1_dist = 0;
+        let mut p0_dist_to_center = [0; BOARD_WIDTH as usize];
+        let mut p1_dist_to_center = [0; BOARD_WIDTH as usize];
+        for x in 0..BOARD_WIDTH as i8 {
+            for y in 0..BOARD_HEIGHT as i8 {
+                let tile = state.get(x, y);
+                if tile == Tile::Player(0) {
+                    p0_kinds[kind(x, y)] += 1;
+                    p0_ys[y as usize] += 1;
+                    p0_dist += BOARD_HEIGHT as isize - 1 - y as isize;
+                    p0_dist_to_center[EvaluationCache::dist_to_center(x, y) as usize] += 1;
+                } else if tile == Tile::Player(1) {
+                    p1_kinds[kind(x, y)] += 1;
+                    p1_ys[y as usize] += 1;
+                    p1_dist += y as isize;
+                    p1_dist_to_center[EvaluationCache::dist_to_center(x, y) as usize] += 1;
+                }
+            }
+        }
+
+        EvaluationCache {
+            p0_target_kinds,
+            p1_target_kinds,
+            p0_kinds,
+            p1_kinds,
+            p0_ys,
+            p1_ys,
+            p0_dist_to_center,
+            p1_dist_to_center,
+            p0_dist,
+            p1_dist,
+        }
+    }
+}
+
+impl EvaluationCache {
+    fn dist_to_center(x: i8, y: i8) -> i8 {
+        ::std::cmp::min((6-x).abs(), (x-(6+y%2)).abs())
+    }
+
+    fn update(&mut self, player: u8, mov: Move) {
+        if player == 0 {
+            self.p0_kinds[kind(mov.from.0, mov.from.1)] -= 1;
+            self.p0_kinds[kind(mov.to.0, mov.to.1)] += 1;
+            self.p0_ys[mov.from.1 as usize] -= 1;
+            self.p0_ys[mov.to.1 as usize] += 1;
+            self.p0_dist += (mov.from.1 - mov.to.1) as isize;
+            self.p0_dist_to_center[EvaluationCache::dist_to_center(mov.from.0, mov.from.1) as usize] -= 1;
+            self.p0_dist_to_center[EvaluationCache::dist_to_center(mov.to.0, mov.to.1) as usize] += 1;
+        } else if player == 1 {
+            self.p1_kinds[kind(mov.from.0, mov.from.1)] -= 1;
+            self.p1_kinds[kind(mov.to.0, mov.to.1)] += 1;
+            self.p1_ys[mov.from.1 as usize] -= 1;
+            self.p1_ys[mov.to.1 as usize] += 1;
+            self.p1_dist += (mov.to.1 - mov.from.1) as isize;
+            self.p1_dist_to_center[EvaluationCache::dist_to_center(mov.from.0, mov.from.1) as usize] -= 1;
+            self.p1_dist_to_center[EvaluationCache::dist_to_center(mov.to.0, mov.to.1) as usize] += 1;
+        }
+    }
+
+    // Score should lie between -100,000 and 100,000
+    fn score_kinds(&self) -> Score {
+        let p0 = self.p0_kinds.iter().zip(&self.p0_target_kinds).map(|(&have, &target): (&i8, &i8)| (target-have).abs()).sum::<i8>() as Score;
+        let p1 = self.p1_kinds.iter().zip(&self.p1_target_kinds).map(|(&have, &target): (&i8, &i8)| (target-have).abs()).sum::<i8>() as Score;
+        // p1-p0 lies in [-12, 12]
+        100_000 * (p1 - p0) / 12
+    }
+
+    fn score_total_distance(&self) -> Score {
+        let p0 = self.p0_dist;
+        let p1 = self.p1_dist;
+        // p1 - p0 lies between [-209, 209]
+        100_000*(p1 - p0) / 209
+    }
+
+    fn score_dist_first_piece(&self) -> Score {
+        let p0 = self.p0_ys.iter().rev().enumerate().find(|&(_dist, &count)| count > 0).unwrap().0 as isize;
+        let p1 = self.p1_ys.iter().enumerate().find(|&(_dist, &count)| count > 0).unwrap().0 as isize;
+
+        100_000*(p1 - p0) / 13
+    }
+
+    fn score_dist_last_piece(&self) -> Score {
+        let p0 = self.p0_ys.iter().rev().enumerate().rev().find(|&(_dist, &count)| count > 0).unwrap().0 as isize;
+        let p1 = self.p1_ys.iter().enumerate().rev().find(|&(_dist, &count)| count > 0).unwrap().0 as isize;
+
+        100_000*(p1 - p0) / 17
+    }
+
+    fn score_centralization(&self) -> Score {
+        let p0 = self.p0_dist_to_center.iter().enumerate().map(|(dist, &count)| ::std::cmp::max(0, dist as Score-3) as Score*count as Score).sum::<Score>();
+        let p1 = self.p1_dist_to_center.iter().enumerate().map(|(dist, &count)| ::std::cmp::max(0, dist as Score-3) as Score*count as Score).sum::<Score>();
+        100_000*(p1 - p0) / 100
     }
 }
 
