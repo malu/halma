@@ -463,7 +463,7 @@ struct Transposition {
     ply: usize,
 }
 
-const TT_BITS: usize = 16;
+const TT_BITS: usize = 20;
 const TT_SIZE: usize = 1 << TT_BITS;
 
 struct TranspositionTable {
