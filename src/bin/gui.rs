@@ -106,7 +106,7 @@ fn main() {
     let mut display_moves = false;
 
     let mut events = sdl.event_pump().unwrap();
-    let depth = 6;
+    let depth = 8;
 
     let mut ai0 = AI::new(*game.state());
     ai0.print_statistics = true;
