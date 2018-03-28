@@ -135,6 +135,24 @@ impl GameState {
         let mut result = Vec::new();
         let mut jumping_targets = vec![(x, y)];
 
+        while !jumping_targets.is_empty() {
+            let (sx, sy) = jumping_targets.pop().unwrap();
+
+            for &(dx, dy, jx, jy) in &[(-1, 0, -2, 0), (1, 0, 2, 0), (-y%2+1, 1, 1, 2), (-y%2, 1, -1, 2), (-y%2+1, -1, 1, -2), (-y%2, -1, -1, -2)] {
+                if !self.is_valid_location(sx+dx, sy+dy) || !self.is_valid_location(sx+jx, sy+jy) {
+                    continue;
+                }
+
+                if let Tile::Player(_) = self.get(sx+dx, sy+dy) {
+                    if self.get(sx+jx, sy+jy) == Tile::Empty && !jumping_targets.contains(&(sx+jx, sy+jy)) && !result.contains(&(sx+jx, sy+jy)) {
+                        jumping_targets.push((sx+jx, sy+jy));
+                    }
+                }
+            }
+
+            result.push((sx, sy));
+        }
+
         for &(dx, dy) in &[(-1, 0), (1, 0), (-y%2+1, 1), (-y%2, 1), (-y%2+1, -1), (-y%2, -1)] {
             if !self.is_valid_location(x+dx, y+dy) {
                 continue;
@@ -145,25 +163,9 @@ impl GameState {
             }
         }
 
-        while !jumping_targets.is_empty() {
-            let (x, y) = jumping_targets.pop().unwrap();
 
-            for &(dx, dy, jx, jy) in &[(-1, 0, -2, 0), (1, 0, 2, 0), (-y%2+1, 1, 1, 2), (-y%2, 1, -1, 2), (-y%2+1, -1, 1, -2), (-y%2, -1, -1, -2)] {
-                if !self.is_valid_location(x+dx, y+dy) || !self.is_valid_location(x+jx, y+jy) {
-                    continue;
-                }
-
-                if let Tile::Player(_) = self.get(x+dx, y+dy) {
-                    if self.get(x+jx, y+jy) == Tile::Empty && !jumping_targets.contains(&(x+jx, y+jy)) && !result.contains(&(x+jx, y+jy)) {
-                        jumping_targets.push((x+jx, y+jy));
-                    }
-                }
-            }
-
-            result.push((x, y));
-        }
-
-        result.retain(|&pos| pos != (x, y));
+        result.swap_remove(0);
+        assert!(result.iter().all(|&p| p != (x, y)));
         result
     }
 
