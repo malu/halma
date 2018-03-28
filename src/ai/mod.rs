@@ -362,7 +362,6 @@ impl AI {
             let mut alpha = -Score::max_value();
             let mut beta = Score::max_value();
 
-            let mut max_score = -Score::max_value();
             score = Score::min_value();
 
             for i in 0..num_moves {
@@ -401,7 +400,6 @@ impl AI {
 
                 if v > alpha {
                     max_move = mov;
-                    max_score = v;
                     alpha = v;
                 }
 
