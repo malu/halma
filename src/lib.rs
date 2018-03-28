@@ -105,7 +105,7 @@ impl GameState {
 
         while let Some((sx, sy)) = jumping_targets.pop() {
             for &(dx, dy, jx, jy) in &[(-1, 0, -2, 0), (1, 0, 2, 0), (-y%2+1, 1, 1, 2), (-y%2, 1, -1, 2), (-y%2+1, -1, 1, -2), (-y%2, -1, -1, -2)] {
-                if !self.is_valid_location(sx+dx, sy+dy) || !self.is_valid_location(sx+jx, sy+jy) {
+                if !self.is_valid_location(sx+jx, sy+jy) {
                     continue;
                 }
 
