@@ -103,7 +103,7 @@ impl AI {
         }
 
         // 2. Check if we ran out of depth and have to evaluate the position staticly.
-        if depth <= 0 {
+        if depth < ONE_PLY {
             return self.evaluate_position();
         }
 
@@ -330,7 +330,7 @@ impl AI {
 
         let mut max_move = moves[0];
 
-        for d in 0..depth {
+        for d in 1..depth {
             let mut moves_explored = 0;
             let mut alpha = -Score::max_value();
             let mut beta = Score::max_value();
