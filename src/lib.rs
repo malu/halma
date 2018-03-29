@@ -66,30 +66,30 @@ impl GameState {
         self.board[x as usize][y as usize]
     }
 
-    pub fn targets(&self, player: u8) -> &[(i8, i8)] {
+    pub fn targets(player: u8) -> &'static [(i8, i8)] {
         if player == 0 {
             &[
-                (12, 4), (12, 5), (12, 6), (12, 7), (12, 8),
-                (13, 5), (13, 6), (13, 7), (13, 8),
-                (14, 5), (14, 6), (14, 7),
-                (15, 6), (15, 7),
-                (16, 6),
+                (4, 12), (5, 12), (6, 12), (7, 12), (8, 12),
+                (5, 13), (6, 13), (7, 13), (8, 13),
+                (5, 14), (6, 14), (7, 14),
+                (6, 15), (7, 15),
+                (6, 16),
             ]
         } else if player == 1 {
             &[
-                (0, 6),
-                (1, 6), (1, 7),
-                (2, 5), (2, 6), (2, 7),
-                (3, 5), (3, 6), (3, 7), (3, 8),
-                (4, 4), (4, 5), (4, 6), (4, 7), (4, 8),
+                (6, 0),
+                (6, 1), (7, 1),
+                (5, 2), (6, 2), (7, 2),
+                (5, 3), (6, 3), (7, 3), (8, 3),
+                (4, 4), (5, 4), (6, 4), (7, 4), (8, 4),
             ]
         } else {
-            &[]
+            unreachable!()
         }
     }
 
     pub fn won(&self, player: u8) -> bool {
-        for &(x, y) in self.targets(player) {
+        for &(x, y) in GameState::targets(player) {
             if self.get(x, y) != Tile::Player(player) {
                 return false;
             }

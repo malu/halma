@@ -17,12 +17,12 @@ pub struct EvaluationCache {
 impl<'a> From<&'a GameState> for EvaluationCache {
     fn from(state: &GameState) -> Self {
         let mut p0_target_kinds = [0; 4];
-        for &(x, y) in state.targets(0) {
+        for &(x, y) in GameState::targets(0) {
             p0_target_kinds[kind(x, y)] += 1;
         }
 
         let mut p1_target_kinds = [0; 4];
-        for &(x, y) in state.targets(1) {
+        for &(x, y) in GameState::targets(1) {
             p1_target_kinds[kind(x, y)] += 1;
         }
 
