@@ -45,11 +45,11 @@ fn draw_board(canvas: &mut sdl2::render::WindowCanvas, state: &GameState) {
 }
 
 fn board_space_to_screen_space(x: i8, y: i8) -> (i32, i32) {
-    let screen_y = 120 + y as i32*20;
+    let screen_y = 10 + y as i32*20;
     let screen_x = if y % 2 == 0 {
-        260 + x as i32 * 20
+        20 + x as i32 * 20
     } else {
-        260 + x as i32 * 20 - 10
+        20 + x as i32 * 20 - 10
     };
 
     (screen_x, screen_y)
@@ -92,7 +92,7 @@ fn nearest_board_position(state: &GameState, x: i32, y: i32) -> Option<(i8, i8)>
 fn main() {
     let sdl = sdl2::init().unwrap();
     let video = sdl.video().unwrap();
-    let window = video.window("halma", 800, 600).position_centered().build().unwrap();
+    let window = video.window("halma", 280, 340).position_centered().build().unwrap();
     let mut canvas = window.into_canvas().software().build().unwrap();
 
     canvas.set_draw_color(Color::RGB(224, 224, 224));
