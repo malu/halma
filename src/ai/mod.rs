@@ -81,19 +81,6 @@ impl AI {
         self.update_hash(mov.inverse());
     }
 
-    pub fn possible_moves(&self) -> Vec<Move> {
-        let mut result = Vec::new();
-
-        for x in 0..BOARD_WIDTH as i8 {
-            for y in 0..BOARD_HEIGHT as i8 {
-                if self.state.get(x, y) == Tile::Player(self.state.current_player) {
-                    result.append(&mut self.state.moves_from(x, y));
-                }
-            }
-        }
-        result
-    }
-
     fn search_negamax(&mut self, ply: isize, alpha: Score, beta: Score, depth: isize) -> Score {
         self.visited_nodes += 1;
 
@@ -171,7 +158,7 @@ impl AI {
         //    move ordering score above). If we did not get a beta cutoff during these 8 moves, we
         //    try the remaining moves in any order because the move ordering seems bad and we give
         //    up sorting.
-        for mov in self.possible_moves().order(8, score_move_order) {
+        for mov in self.state.possible_moves().order(8, score_move_order) {
             self.internal_make_move(mov);
             let score;
 

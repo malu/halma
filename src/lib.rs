@@ -134,6 +134,19 @@ impl GameState {
         result
     }
 
+    pub fn possible_moves(&self) -> Vec<Move> {
+        let mut result = Vec::new();
+
+        for x in 0..BOARD_WIDTH as i8 {
+            for y in 0..BOARD_HEIGHT as i8 {
+                if self.get(x, y) == Tile::Player(self.current_player) {
+                    result.append(&mut self.moves_from(x, y));
+                }
+            }
+        }
+        result
+    }
+
     fn move_piece(&mut self, mov: Move) {
         let (fx, fy) = mov.from;
         let (tx, ty) = mov.to;
