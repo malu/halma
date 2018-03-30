@@ -94,8 +94,7 @@ impl AI {
         self.update_hash(mov.inverse());
     }
 
-    fn search_negamax(&mut self, ply: isize, alpha: Score, beta: Score, depth: isize) -> Score {
-        self.visited_nodes += 1;
+    fn search_negamax(&mut self, ply: isize, alpha: Score, beta: Score, depth: isize, pv: bool) -> Score {
 
         // 1. Check if we lost.
         if self.state.won(1-self.state.current_player) {
@@ -151,7 +150,7 @@ impl AI {
                 // skip the check whether this is the first evaluated move.
                 assert!(moves_explored == 0);
                 self.internal_make_move(tt_mov);
-                tt_move_score = -self.search_negamax(ply+1, -beta, -alpha, depth-ONE_PLY);
+                tt_move_score = -self.search_negamax(ply+1, -beta, -alpha, depth-ONE_PLY, pv);
                 self.internal_unmake_move(tt_mov);
                 moves_explored += 1;
             }
@@ -159,7 +158,7 @@ impl AI {
             // In this case we track beta cutoffs as transposition table cutoffs.
             if tt_move_score >= beta {
                 self.tt_cutoffs += 1;
-                self.insert_transposition(Evaluation::LowerBound(beta), Some(tt_mov), depth);
+                self.insert_transposition(Evaluation::LowerBound(beta), Some(tt_mov), depth, pv);
                 self.moves_explored[::std::cmp::min(7, moves_explored)] += 1;
                 return beta;
             }
@@ -193,13 +192,15 @@ impl AI {
             // evaluated using a null window and a shallower depth. If the null window evaluation
             // fails high, we retry using the full window.
             if moves_explored == 0 {
-                score = -self.search_negamax(ply+1, -beta, -alpha, depth-ONE_PLY);
+                score = -self.search_negamax(ply+1, -beta, -alpha, depth-ONE_PLY, pv);
             } else {
-                self.pv_nullsearches += 1;
-                let null_score = -self.search_negamax(ply+1, -alpha-1, -alpha, depth-ONE_PLY*5/3);
-                if null_score > alpha {
+                if pv {
+                    self.pv_nullsearches += 1;
+                }
+                let null_score = -self.search_negamax(ply+1, -alpha-1, -alpha, depth-ONE_PLY, false);
+                if null_score > alpha && pv {
                     self.pv_failed_nullsearches += 1;
-                    score = -self.search_negamax(ply+1, -beta, -alpha, depth-ONE_PLY);
+                    score = -self.search_negamax(ply+1, -beta, -alpha, depth-ONE_PLY, pv);
                 } else {
                     score = null_score;
                 }
@@ -209,7 +210,7 @@ impl AI {
 
             if score >= beta {
                 self.beta_cutoffs += 1;
-                self.insert_transposition(Evaluation::LowerBound(beta), Some(mov), depth);
+                self.insert_transposition(Evaluation::LowerBound(beta), Some(mov), depth, pv);
                 self.moves_explored[::std::cmp::min(7, moves_explored)] += 1;
                 return beta;
             }
@@ -222,9 +223,9 @@ impl AI {
         }
 
         if is_exact {
-            self.insert_transposition(Evaluation::Exact(alpha), best_move, depth);
+            self.insert_transposition(Evaluation::Exact(alpha), best_move, depth, pv);
         } else {
-            self.insert_transposition(Evaluation::UpperBound(alpha), best_move, depth);
+            self.insert_transposition(Evaluation::UpperBound(alpha), best_move, depth, pv);
         }
 
         self.moves_explored[::std::cmp::min(7, moves_explored)] += 1;
@@ -254,7 +255,7 @@ impl AI {
         }
     }
 
-    fn insert_transposition(&mut self, evaluation: Evaluation, best_move: Option<InternalMove>, depth: isize) {
+    fn insert_transposition(&mut self, evaluation: Evaluation, best_move: Option<InternalMove>, depth: isize, pv: bool) {
         if best_move == None {
             return;
         }
@@ -265,6 +266,10 @@ impl AI {
             depth,
             ply: self.state.ply,
         };
+
+        if pv {
+            self.transpositions.insert(self.hash, self.state, transposition);
+        }
 
         let old = self.transpositions.get(self.hash, self.state);
         if old.is_none() {
