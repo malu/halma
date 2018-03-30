@@ -1,12 +1,12 @@
-use ::Move;
 use ai::Score;
+use ai::internal_game_state::InternalMove;
 
 pub trait MoveList {
-    fn order<F>(self, n: usize, score_fn: F) -> MoveListIterator<F> where F: Fn(Move) -> Score;
+    fn order<F>(self, n: usize, score_fn: F) -> MoveListIterator<F> where F: Fn(InternalMove) -> Score;
 }
 
-impl MoveList for Vec<Move> {
-    fn order<F>(self, n: usize, score_fn: F) -> MoveListIterator<F> where F: Fn(Move) -> Score {
+impl MoveList for Vec<InternalMove> {
+    fn order<F>(self, n: usize, score_fn: F) -> MoveListIterator<F> where F: Fn(InternalMove) -> Score {
         MoveListIterator {
             moves: self,
             index: 0,
@@ -17,14 +17,14 @@ impl MoveList for Vec<Move> {
 }
 
 pub struct MoveListIterator<F> {
-    moves: Vec<Move>,
+    moves: Vec<InternalMove>,
     n: usize,
     index: usize,
     score_fn: F,
 }
 
-impl<F> Iterator for MoveListIterator<F> where F: Fn(Move) -> Score {
-    type Item = Move;
+impl<F> Iterator for MoveListIterator<F> where F: Fn(InternalMove) -> Score {
+    type Item = InternalMove;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.index == self.moves.len() {

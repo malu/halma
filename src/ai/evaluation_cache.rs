@@ -1,5 +1,7 @@
-use ::{BOARD_HEIGHT, BOARD_WIDTH, GameState, Move, Tile};
+use ::{BOARD_HEIGHT, BOARD_WIDTH, GameState, Tile};
 use ai::Score;
+use ai::internal_game_state::InternalMove;
+use ai::bitboard::index_to_pos;
 
 pub struct EvaluationCache {
     p0_target_kinds: [i8; 4],
@@ -71,23 +73,25 @@ impl EvaluationCache {
         ::std::cmp::min((6-x).abs(), (x-(6+y%2)).abs())
     }
 
-    pub fn update(&mut self, player: u8, mov: Move) {
+    pub fn update(&mut self, player: u8, mov: InternalMove) {
+        let (fx, fy) = index_to_pos(mov.from);
+        let (tx, ty) = index_to_pos(mov.to);
         if player == 0 {
-            self.p0_kinds[kind(mov.from.0, mov.from.1)] -= 1;
-            self.p0_kinds[kind(mov.to.0, mov.to.1)] += 1;
-            self.p0_ys[mov.from.1 as usize] -= 1;
-            self.p0_ys[mov.to.1 as usize] += 1;
-            self.p0_dist += (mov.from.1 - mov.to.1) as isize;
-            self.p0_dist_to_center[EvaluationCache::dist_to_center(mov.from.0, mov.from.1) as usize] -= 1;
-            self.p0_dist_to_center[EvaluationCache::dist_to_center(mov.to.0, mov.to.1) as usize] += 1;
+            self.p0_kinds[kind(fx, fy)] -= 1;
+            self.p0_kinds[kind(tx, ty)] += 1;
+            self.p0_ys[fy as usize] -= 1;
+            self.p0_ys[ty as usize] += 1;
+            self.p0_dist += (fy - ty) as isize;
+            self.p0_dist_to_center[EvaluationCache::dist_to_center(fx, fy) as usize] -= 1;
+            self.p0_dist_to_center[EvaluationCache::dist_to_center(tx, ty) as usize] += 1;
         } else if player == 1 {
-            self.p1_kinds[kind(mov.from.0, mov.from.1)] -= 1;
-            self.p1_kinds[kind(mov.to.0, mov.to.1)] += 1;
-            self.p1_ys[mov.from.1 as usize] -= 1;
-            self.p1_ys[mov.to.1 as usize] += 1;
-            self.p1_dist += (mov.to.1 - mov.from.1) as isize;
-            self.p1_dist_to_center[EvaluationCache::dist_to_center(mov.from.0, mov.from.1) as usize] -= 1;
-            self.p1_dist_to_center[EvaluationCache::dist_to_center(mov.to.0, mov.to.1) as usize] += 1;
+            self.p1_kinds[kind(fx, fy)] -= 1;
+            self.p1_kinds[kind(tx, ty)] += 1;
+            self.p1_ys[fy as usize] -= 1;
+            self.p1_ys[ty as usize] += 1;
+            self.p1_dist += (ty - fy) as isize;
+            self.p1_dist_to_center[EvaluationCache::dist_to_center(fx, fy) as usize] -= 1;
+            self.p1_dist_to_center[EvaluationCache::dist_to_center(tx, ty) as usize] += 1;
         }
     }
 
@@ -134,7 +138,7 @@ fn kind(x: i8, y: i8) -> usize {
 mod tests {
     #[test]
     fn test_kinds() {
-        use ai::kind;
+        use ai::evaluation_cache::kind;
 
         let x = 6;
         let y = 9;

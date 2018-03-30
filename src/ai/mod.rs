@@ -1,12 +1,15 @@
-use {BOARD_HEIGHT, BOARD_WIDTH, GameState, Move, Tile};
+use {GameState, Move};
 
+mod bitboard;
 mod evaluation_cache;
 mod incremental_hasher;
+mod internal_game_state;
 mod move_list_iterator;
 mod tt;
 
 use self::evaluation_cache::*;
 use self::incremental_hasher::*;
+use self::internal_game_state::*;
 use self::move_list_iterator::*;
 use self::tt::*;
 
@@ -15,7 +18,7 @@ type Score = isize;
 const ONE_PLY: isize = 1000;
 
 pub struct AI {
-    pub state: GameState,
+    pub state: InternalGameState,
     pub print_statistics: bool,
     transpositions: TranspositionTable,
     evaluation_cache: EvaluationCache,
@@ -36,7 +39,7 @@ pub struct AI {
 impl AI {
     pub fn new(state: GameState) -> AI {
         AI {
-            state,
+            state: InternalGameState::from(state),
             print_statistics: false,
             evaluation_cache: EvaluationCache::from(&state),
             transpositions: TranspositionTable::default(),
@@ -55,27 +58,27 @@ impl AI {
         }
     }
 
-    fn update_hash(&mut self, mov: Move) {
+    fn update_hash(&mut self, mov: InternalMove) {
         self.hash ^= self.hasher.update(self.state.current_player, mov);
     }
 
     pub fn make_move(&mut self, mov: Move) {
-        self.internal_make_move(mov);
+        self.internal_make_move(InternalMove::from(mov));
         self.state.ply += 1;
     }
 
-    fn internal_make_move(&mut self, mov: Move) {
+    fn internal_make_move(&mut self, mov: InternalMove) {
         self.evaluation_cache.update(self.state.current_player, mov);
         self.update_hash(mov);
         self.state.move_piece(mov);
     }
 
     pub fn unmake_move(&mut self, mov: Move) {
-        self.internal_unmake_move(mov);
+        self.internal_unmake_move(InternalMove::from(mov));
         self.state.ply -= 1;
     }
 
-    fn internal_unmake_move(&mut self, mov: Move) {
+    fn internal_unmake_move(&mut self, mov: InternalMove) {
         self.state.move_piece(mov.inverse());
         self.evaluation_cache.update(self.state.current_player, mov.inverse());
         self.update_hash(mov.inverse());
@@ -146,11 +149,11 @@ impl AI {
 
         // We score the moves (for ordering purposes) by how far they advance along the board.
         let current_player = self.state.current_player;
-        let score_move_order = |mov: Move| -> isize {
+        let score_move_order = |mov: InternalMove| -> isize {
             if current_player == 0 {
-                mov.to.1 as isize - mov.from.1 as isize
+                mov.to as isize - mov.from as isize
             } else {
-                mov.from.1 as isize - mov.to.1 as isize
+                mov.from as isize - mov.to as isize
             }
         };
 
@@ -227,7 +230,7 @@ impl AI {
         }
     }
 
-    fn insert_transposition(&mut self, evaluation: Evaluation, best_move: Option<Move>, depth: isize) {
+    fn insert_transposition(&mut self, evaluation: Evaluation, best_move: Option<InternalMove>, depth: isize) {
         if best_move == None {
             return;
         }
@@ -255,7 +258,7 @@ impl AI {
 
     }
 
-    fn get_transposition(&mut self, alpha: Score, beta: Score, depth: isize) -> Option<(Option<Score>, Move)> {
+    fn get_transposition(&mut self, alpha: Score, beta: Score, depth: isize) -> Option<(Option<Score>, InternalMove)> {
         self.tt_lookups += 1;
         if let Some(transposition) = self.transpositions.get(self.hash, self.state) {
             let mov = transposition.best_move;
@@ -332,7 +335,7 @@ impl AI {
             println!("     TT | lookups {}", self.tt_lookups);
             println!("        | hits    {} ({:.2}%)", self.tt_hits, 100.0 * self.tt_hits as f64 / self.tt_lookups as f64);
             println!("        | cutoffs {} ({:.2}%)", self.tt_cutoffs, 100.0 * self.tt_cutoffs as f64 / self.tt_hits as f64);
-            println!("        | size    {} ({} MB)", self.transpositions.len(), (self.transpositions.len() * ::std::mem::size_of::<Option<(GameState, Transposition)>>()) / (1024*1024));
+            println!("        | size    {} ({} MB)", self.transpositions.len(), (self.transpositions.len() * ::std::mem::size_of::<Option<(InternalGameState, Transposition)>>()) / (1024*1024));
             println!("        | insert  {}", self.transpositions.insertion);
             println!("        | update  {} ({:.2}%)", self.transpositions.update, 100.0 * self.transpositions.update as f64 / self.transpositions.insertion as f64);
             println!("        | replace {} ({:.2}%)", self.transpositions.replace, 100.0 * self.transpositions.replace as f64 / self.transpositions.insertion as f64);
@@ -353,7 +356,7 @@ impl AI {
             println!("");
         }
 
-        mov
+        mov.to_move()
     }
 }
 

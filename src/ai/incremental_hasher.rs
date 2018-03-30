@@ -1,10 +1,10 @@
-use ::{BOARD_HEIGHT, BOARD_WIDTH, Move};
+use ai::internal_game_state::InternalMove;
 
 pub type IncrementalHash = usize;
 
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Debug)]
+#[derive(Copy, Clone)]
 pub struct IncrementalHasher {
-    tile_hashes: [[(IncrementalHash, IncrementalHash); BOARD_HEIGHT as usize]; BOARD_WIDTH as usize],
+    tile_hashes: [(IncrementalHash, IncrementalHash); 256],
     to_move_hash: IncrementalHash,
 }
 
@@ -13,12 +13,10 @@ impl Default for IncrementalHasher {
         use rand::Rng;
         let mut rng = ::rand::thread_rng();
 
-        let mut tile_hashes = [[(0, 0); BOARD_HEIGHT as usize]; BOARD_WIDTH as usize];
+        let mut tile_hashes = [(0, 0); 256];
 
-        for x in 0..BOARD_WIDTH as usize {
-            for y in 0..BOARD_HEIGHT as usize {
-                tile_hashes[x][y] = (rng.gen(), rng.gen());
-            }
+        for i in 0..256 {
+            tile_hashes[i] = (rng.gen(), rng.gen());
         }
 
         let to_move_hash = rng.gen();
@@ -31,15 +29,15 @@ impl Default for IncrementalHasher {
 }
 
 impl IncrementalHasher {
-    pub fn update(&self, current_player: u8, mov: Move) -> IncrementalHash {
+    pub fn update(&self, current_player: u8, mov: InternalMove) -> IncrementalHash {
         let from;
         let to;
         if current_player == 0 {
-            from = self.tile_hashes[mov.from.0 as usize][mov.from.1 as usize].0;
-            to = self.tile_hashes[mov.to.0 as usize][mov.to.1 as usize].0;
+            from = self.tile_hashes[mov.from as usize].0;
+            to = self.tile_hashes[mov.to as usize].0;
         } else {
-            from = self.tile_hashes[mov.from.0 as usize][mov.from.1 as usize].1;
-            to = self.tile_hashes[mov.to.0 as usize][mov.to.1 as usize].1;
+            from = self.tile_hashes[mov.from as usize].1;
+            to = self.tile_hashes[mov.to as usize].1;
         }
 
         from ^ to ^ self.to_move_hash
