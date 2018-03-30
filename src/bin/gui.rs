@@ -7,7 +7,7 @@ use sdl2::pixels::Color;
 use sdl2::gfx::primitives::DrawRenderer;
 
 use halma::*;
-use halma::ai::AI;
+use halma::ai::{AI, StopCondition};
 
 fn draw_tile(tile: Tile, canvas: &mut sdl2::render::WindowCanvas, board_x: i8, board_y: i8) {
     let (draw_x, draw_y) = board_space_to_screen_space(board_x, board_y);
@@ -106,11 +106,12 @@ fn main() {
     let mut display_moves = false;
 
     let mut events = sdl.event_pump().unwrap();
-    let depth = 8;
 
     let mut ai0 = AI::new(*game.state());
     ai0.print_statistics = true;
+    ai0.stop_condition = StopCondition::Time(::std::time::Duration::from_secs(1));
     let mut ai1 = AI::new(*game.state());
+    ai1.stop_condition = StopCondition::Time(::std::time::Duration::from_secs(1));
 
     let mut autoplay0 = true;
     let mut autoplay1 = true;
@@ -128,9 +129,9 @@ fn main() {
                 Event::KeyDown { keycode: Some(Keycode::A), .. } => {
                     let mov;
                     if game.state().current_player() == 0 {
-                        mov = ai0.calculate_move(depth);
+                        mov = ai0.calculate_move();
                     } else {
-                        mov = ai1.calculate_move(depth);
+                        mov = ai1.calculate_move();
                     }
                     game.move_piece(mov);
                     ai0.make_move(mov);
@@ -171,12 +172,12 @@ fn main() {
         }
         
         if autoplay0 && game.state().current_player() == 0 {
-            let mov = ai0.calculate_move(depth);
+            let mov = ai0.calculate_move();
             game.move_piece(mov);
             ai0.make_move(mov);
             ai1.make_move(mov);
         } else if autoplay1 && game.state().current_player() == 1 {
-            let mov = ai1.calculate_move(depth);
+            let mov = ai1.calculate_move();
             game.move_piece(mov);
             ai0.make_move(mov);
             ai1.make_move(mov);

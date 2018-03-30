@@ -13,6 +13,12 @@ use self::internal_game_state::*;
 use self::move_list_iterator::*;
 use self::tt::*;
 
+#[derive(Copy, Clone, PartialEq, Eq)]
+pub enum StopCondition {
+    Depth(isize),
+    Time(::std::time::Duration),
+}
+
 type Score = isize;
 
 const ONE_PLY: isize = 1000;
@@ -20,6 +26,8 @@ const ONE_PLY: isize = 1000;
 pub struct AI {
     pub state: InternalGameState,
     pub print_statistics: bool,
+    pub stop_condition: StopCondition,
+    start: ::std::time::Instant,
     transpositions: TranspositionTable,
     evaluation_cache: EvaluationCache,
     visited_nodes: usize,
@@ -41,6 +49,8 @@ impl AI {
         AI {
             state: InternalGameState::from(state),
             print_statistics: false,
+            stop_condition: StopCondition::Depth(0),
+            start: ::std::time::Instant::now(),
             evaluation_cache: EvaluationCache::from(&state),
             transpositions: TranspositionTable::default(),
             visited_nodes: 0,
@@ -89,13 +99,27 @@ impl AI {
 
         // 1. Check if we lost.
         if self.state.won(1-self.state.current_player) {
+            self.visited_nodes += 1;
             return -Score::max_value()+ply;
         }
 
         // 2. Check if we ran out of depth and have to evaluate the position staticly.
         if depth < ONE_PLY {
+            self.visited_nodes += 1;
             return self.evaluate_position();
         }
+
+        if self.visited_nodes & 0x7FF == 0 {
+            if let StopCondition::Time(dur) = self.stop_condition {
+                let time_taken = ::std::time::Instant::now() - self.start;
+                let remaining = dur.checked_sub(time_taken);
+                if remaining == None || remaining.unwrap() < ::std::time::Duration::new(0, ply as u32*5_000_000) {
+                    return self.evaluate_position();
+                }
+            }
+        }
+
+        self.visited_nodes += 1;
 
         // Tracks the number of moves tried in this position. We use this to distinguish between
         // the first move we try (which we expect to be the best/principal variation) and the other
@@ -288,7 +312,7 @@ impl AI {
         None
     }
 
-    pub fn calculate_move(&mut self, depth: isize) -> Move {
+    pub fn calculate_move(&mut self) -> Move {
         // reset statistics
         self.visited_nodes = 0;
         self.visited_leaf_nodes = 0;
@@ -304,16 +328,31 @@ impl AI {
         self.moves_explored = [0; 8];
 
         //println!("Search depth:  {}", depth);
-        let start = ::std::time::Instant::now();
+        self.start = ::std::time::Instant::now();
         let alpha = -Score::max_value();
         let beta = Score::max_value();
-        for d in 1..depth+1 {
+        for d in 1.. {
+            match self.stop_condition {
+                StopCondition::Depth(stop_depth) => {
+                    if stop_depth < d {
+                        break;
+                    }
+                }
+                StopCondition::Time(dur) => {
+                    let time_taken = ::std::time::Instant::now() - self.start;
+                    let remaining = dur.checked_sub(time_taken);
+                    if remaining == None || remaining.unwrap() < ::std::time::Duration::new(0, 50_000_000) {
+                        break;
+                }
+            }
+            }
+
             self.search_negamax(0, alpha, beta, d*ONE_PLY);
         }
 
         let score;
         let mov;
-        if let Some((Some(pvscore), pvmove)) = self.get_transposition(alpha, beta, depth*ONE_PLY) {
+        if let Some((Some(pvscore), pvmove)) = self.get_transposition(alpha, beta, 1) {
             score = pvscore;
             mov = pvmove;
         } else {
@@ -321,7 +360,7 @@ impl AI {
         }
 
         let end = ::std::time::Instant::now();
-        let elapsed = end-start;
+        let elapsed = end-self.start;
         let secs = elapsed.as_secs() as f64 + elapsed.subsec_nanos() as f64 / 1_000_000_000.0;
         let interior_nodes = self.visited_nodes - self.visited_leaf_nodes;
         let total_cutoffs = self.tt_cutoffs + self.beta_cutoffs;
