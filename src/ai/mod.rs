@@ -352,7 +352,10 @@ impl AI {
             }
             }
 
-            self.search_negamax(0, alpha, beta, d*ONE_PLY);
+            let score = self.search_negamax(0, alpha, beta, d*ONE_PLY, true);
+            if score > Score::max_value()-1000 {
+                break;
+            }
         }
 
         let score;
