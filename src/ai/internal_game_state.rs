@@ -13,12 +13,12 @@ impl InternalGameState {
         !BB_INVALID.get_bit(index)
     }
 
-    fn pos_is_empty(&self, index: BitIndex) -> bool {
-        !self.pieces[0].get_bit(index) && !self.pieces[1].get_bit(index)
+    fn empty_bb(&self) -> Bitboard {
+        !self.occupied_bb()
     }
 
-    fn pos_is_occupied(&self, index: BitIndex) -> bool {
-        self.pieces[0].get_bit(index) || self.pieces[1].get_bit(index)
+    fn occupied_bb(&self) -> Bitboard {
+        self.pieces[0] | self.pieces[1]
     }
 
     pub fn won(&self, player: u8) -> bool {
@@ -26,9 +26,11 @@ impl InternalGameState {
     }
 
     fn moves_from(&self, from: BitIndex) -> Vec<InternalMove> {
-        let mut result = Vec::with_capacity(128);
-        let mut jumping_targets = Vec::with_capacity(128);
-        jumping_targets.push(from);
+        let mut result = Bitboard::default();
+        let mut jumping_targets = Bitboard::bit(from);
+
+        let skip_bb = !BB_INVALID & self.occupied_bb();
+        let empty_bb = !BB_INVALID & self.empty_bb();
 
         while let Some(reachable) = jumping_targets.pop() {
             for &(skip, jump) in &[
@@ -41,13 +43,12 @@ impl InternalGameState {
             ] {
                 let skip = reachable.wrapping_add(skip);
                 let jump = reachable.wrapping_add(jump);
-                if !InternalGameState::is_valid_location(skip) || !InternalGameState::is_valid_location(jump) {
-                    continue;
-                }
 
-                if self.pos_is_empty(jump) && self.pos_is_occupied(skip) && !jumping_targets.contains(&jump) && !result.contains(&InternalMove { from, to: jump }) {
-                    jumping_targets.push(jump);
-                    result.push(InternalMove { from, to: jump });
+                let jump_bb = empty_bb & !jumping_targets & !result;
+
+                if skip_bb.get_bit(skip) && jump_bb.get_bit(jump) {
+                    jumping_targets.set_bit(jump);
+                    result.set_bit(jump);
                 }
             }
         }
@@ -61,17 +62,13 @@ impl InternalGameState {
             242,
         ] {
             let to = from.wrapping_add(slide);
-            if !InternalGameState::is_valid_location(to) {
-                continue;
-            }
-
-            if self.pos_is_empty(to) {
-                result.push(InternalMove { from, to });
+            if empty_bb.get_bit(to) {
+                result.set_bit(to);
             }
         }
 
-        assert!(result.iter().all(|&InternalMove { from, to }| from != to));
-        result
+        assert!(result.ones().all(|to| from != to));
+        result.ones().map(|to| InternalMove { from, to }).collect()
     }
 
     pub fn possible_moves(&self) -> Vec<InternalMove> {
