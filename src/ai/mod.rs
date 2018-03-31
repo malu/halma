@@ -121,7 +121,7 @@ impl AI {
         false
     }
 
-    fn search_negamax(&mut self, ply: isize, alpha: Score, beta: Score, depth: isize) -> Score {
+    fn search_pv(&mut self, ply: isize, alpha: Score, beta: Score, depth: isize) -> Score {
         if self.should_stop(ply) {
             return self.evaluate_position();
         }
@@ -160,14 +160,17 @@ impl AI {
             // higher depth. In that case we will not reevaluate but use the score as is. Otherwise
             // evaluate this move as any other move.
             let tt_move_score;
-            if let Some(score) = tt_score {
-                tt_move_score = score;
-            } else {
-                self.internal_make_move(tt_mov);
-                tt_move_score = -self.search_negamax(ply+1, -beta, -alpha, depth-ONE_PLY);
-                self.internal_unmake_move(tt_mov);
-                moves_explored += 1;
+            if let Some((score, exact)) = tt_score {
+                if exact {
+                    self.tt_cutoffs += 1;
+                    return score;
+                }
             }
+
+            self.internal_make_move(tt_mov);
+            tt_move_score = -self.search_pv(ply+1, -beta, -alpha, depth-ONE_PLY);
+            self.internal_unmake_move(tt_mov);
+            moves_explored += 1;
 
             // In this case we track beta cutoffs as transposition table cutoffs.
             if tt_move_score >= beta {
@@ -206,13 +209,13 @@ impl AI {
             // evaluated using a null window and a shallower depth. If the null window evaluation
             // fails high, we retry using the full window.
             if !raised_alpha {
-                score = -self.search_negamax(ply+1, -beta, -alpha, depth-ONE_PLY);
+                score = -self.search_pv(ply+1, -beta, -alpha, depth-ONE_PLY);
             } else {
                 self.pv_nullsearches += 1;
                 let null_score = -self.search_null_window(ply+1, -alpha, depth-ONE_PLY);
                 if null_score > alpha {
                     self.pv_failed_nullsearches += 1;
-                    score = -self.search_negamax(ply+1, -beta, -alpha, depth-ONE_PLY);
+                    score = -self.search_pv(ply+1, -beta, -alpha, depth-ONE_PLY);
                 } else {
                     score = null_score;
                 }
@@ -273,7 +276,11 @@ impl AI {
             // higher depth. In that case we will not reevaluate but use the score as is. Otherwise
             // evaluate this move as any other move.
             let tt_move_score;
-            if let Some(score) = tt_score {
+            if let Some((score, exact)) = tt_score {
+                if exact {
+                    self.tt_cutoffs += 1;
+                    return score;
+                }
                 tt_move_score = score;
             } else {
                 self.internal_make_move(tt_mov);
@@ -373,7 +380,7 @@ impl AI {
 
     }
 
-    fn get_transposition(&mut self, alpha: Score, beta: Score, depth: isize) -> Option<(Option<Score>, InternalMove)> {
+    fn get_transposition(&mut self, alpha: Score, beta: Score, depth: isize) -> Option<(Option<(Score, bool)>, InternalMove)> {
         self.tt_lookups += 1;
         if let Some(transposition) = self.transpositions.get(self.hash, self.state) {
             let mov = transposition.best_move;
@@ -386,15 +393,15 @@ impl AI {
             }
 
             match transposition.evaluation {
-                Evaluation::Exact(score) => return Some((Some(score), mov)),
+                Evaluation::Exact(score) => return Some((Some((score, true)), mov)),
                 Evaluation::LowerBound(lower_bound) => {
                     if lower_bound >= beta {
-                        return Some((Some(beta), mov));
+                        return Some((Some((beta, false)), mov));
                     }
                 }
                 Evaluation::UpperBound(upper_bound) => {
                     if upper_bound <= alpha {
-                        return Some((Some(alpha), mov));
+                        return Some((Some((alpha, false)), mov));
                     }
                 }
             }
@@ -423,6 +430,7 @@ impl AI {
         self.start = ::std::time::Instant::now();
         let alpha = -WINNING_SCORE;
         let beta = WINNING_SCORE;
+        let mut score = 0;
         for d in 1.. {
             match self.stop_condition {
                 StopCondition::Depth(stop_depth) => {
@@ -444,13 +452,11 @@ impl AI {
             }
             }
 
-            self.search_negamax(0, alpha, beta, d*ONE_PLY);
+            score = self.search_pv(0, alpha, beta, d*ONE_PLY);
         }
 
-        let score;
         let mov;
-        if let Some((Some(pvscore), pvmove)) = self.get_transposition(alpha, beta, 1) {
-            score = pvscore;
+        if let Some((_, pvmove)) = self.get_transposition(alpha, beta, 1) {
             mov = pvmove;
         } else {
             panic!("No PV entry in transposition table");
