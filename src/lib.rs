@@ -1,9 +1,12 @@
 extern crate rand;
 extern crate sdl2;
+extern crate serde_json;
+extern crate serde;
+#[macro_use] extern crate serde_derive;
 
 pub mod ai;
 
-#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Tile {
     Empty,
     Invalid,
@@ -13,14 +16,14 @@ pub enum Tile {
 pub const BOARD_WIDTH: u8 = 13;
 pub const BOARD_HEIGHT: u8 = 17;
 
-#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GameState {
     board: [[Tile; BOARD_HEIGHT as usize]; BOARD_WIDTH as usize],
     ply: usize,
     current_player: u8,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct Move {
     pub from: (i8, i8),
     pub to: (i8, i8),
