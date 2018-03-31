@@ -329,17 +329,10 @@ impl AI {
         self.visited_leaf_nodes += 1;
 
         let mut score = 0;
-        let score_dist_last_piece = self.evaluation_cache.score_dist_last_piece();
-        score += score_dist_last_piece;
-
-        let score_total_distance = self.evaluation_cache.score_total_distance();
-        score += score_total_distance;
-
-        let score_center = self.evaluation_cache.score_centralization();
-        score += score_center/3;
-
-        let score_kinds = self.evaluation_cache.score_kinds();
-        score += score_kinds/6;
+        score += self.evaluation_cache.score_dist_last_piece();
+        score += self.evaluation_cache.score_total_distance();
+        score += self.evaluation_cache.score_centralization();
+        score += self.evaluation_cache.score_kinds()/10;
 
         if self.state.current_player == 0 {
             score
