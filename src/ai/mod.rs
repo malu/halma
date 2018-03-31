@@ -322,24 +322,16 @@ impl AI {
             ply: self.state.ply,
         };
 
-        if pv {
-            self.transpositions.insert(self.hash, self.state, transposition);
+        match self.transpositions.get(self.hash, self.state) {
+            None => {
+                self.transpositions.insert(self.hash, self.state, transposition);
+            }
+            Some(old) => {
+                if old.should_be_replaced_by(&transposition, pv) {
+                    self.transpositions.insert(self.hash, self.state, transposition);
+                }
+            }
         }
-
-        let old = self.transpositions.get(self.hash, self.state);
-        if old.is_none() {
-            self.transpositions.insert(self.hash, self.state, transposition);
-            return;
-        }
-
-        if old.unwrap().ply + 6 < self.state.ply {
-            self.transpositions.insert(self.hash, self.state, transposition);
-        }
-
-        if old.unwrap().depth <= depth {
-            self.transpositions.insert(self.hash, self.state, transposition);
-        }
-
     }
 
     fn get_transposition(&mut self, alpha: Score, beta: Score, depth: isize) -> Option<(Option<(Score, bool)>, InternalMove)> {

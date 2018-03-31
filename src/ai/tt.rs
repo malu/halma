@@ -16,6 +16,24 @@ pub struct Transposition {
     pub ply: usize,
 }
 
+impl Transposition {
+    pub fn should_be_replaced_by(&self, other: &Self, pv: bool) -> bool {
+        if pv {
+            return true;
+        }
+
+        if self.ply + 6 < other.ply {
+            return true;
+        }
+
+        if self.depth <= other.depth {
+            return true;
+        }
+
+        false
+    }
+}
+
 const TT_BITS: usize = 20;
 const TT_SIZE: usize = 1 << TT_BITS;
 
