@@ -35,10 +35,9 @@ pub struct AI {
     evaluation: Evaluation,
     visited_nodes: usize,
     visited_leaf_nodes: usize,
-    beta_cutoffs: usize,
+    cutoffs: usize,
     tt_lookups: usize,
     tt_hits: usize,
-    tt_cutoffs: usize,
     pv_nullsearches: usize,
     pv_failed_nullsearches: usize,
     moves_explored: [usize; 8],
@@ -59,10 +58,9 @@ impl AI {
             transpositions: TranspositionTable::default(),
             visited_nodes: 0,
             visited_leaf_nodes: 0,
-            beta_cutoffs: 0,
+            cutoffs: 0,
             tt_lookups: 0,
             tt_hits: 0,
-            tt_cutoffs: 0,
             pv_nullsearches: 0,
             pv_failed_nullsearches: 0,
             moves_explored: [0; 8],
@@ -151,8 +149,7 @@ impl AI {
         let mut best_move = None;
 
         // 3. Lookup current position in transposition table. If we encountered this position
-        //    before, previous evaluations or best moves are useful to get an early beta cutoff
-        //    (which in this case will be tracked as a transposition table cutoff in the statistic).
+        //    before, previous evaluations or best moves are useful to get an early beta cutoff.
         if let Some((tt_score, tt_mov)) = self.get_transposition(alpha, beta, depth) {
             self.tt_hits += 1;
 
@@ -162,7 +159,7 @@ impl AI {
             let tt_move_score;
             if let Some((score, exact)) = tt_score {
                 if exact {
-                    self.tt_cutoffs += 1;
+                    self.cutoffs += 1;
                     return score;
                 }
             }
@@ -172,9 +169,8 @@ impl AI {
             self.internal_unmake_move(tt_mov);
             moves_explored += 1;
 
-            // In this case we track beta cutoffs as transposition table cutoffs.
             if tt_move_score >= beta {
-                self.tt_cutoffs += 1;
+                self.cutoffs += 1;
                 self.insert_transposition(ScoreType::LowerBound(beta), Some(tt_mov), depth, true);
                 self.moves_explored[::std::cmp::min(7, moves_explored)] += 1;
                 return beta;
@@ -224,7 +220,7 @@ impl AI {
             moves_explored += 1;
 
             if score >= beta {
-                self.beta_cutoffs += 1;
+                self.cutoffs += 1;
                 self.insert_transposition(ScoreType::LowerBound(beta), Some(mov), depth, true);
                 self.moves_explored[::std::cmp::min(7, moves_explored)] += 1;
                 return beta;
@@ -268,8 +264,7 @@ impl AI {
         let alpha = beta-1;
 
         // 3. Lookup current position in transposition table. If we encountered this position
-        //    before, previous evaluations or best moves are useful to get an early beta cutoff
-        //    (which in this case will be tracked as a transposition table cutoff in the statistic).
+        //    before, previous evaluations or best moves are useful to get an early beta cutoff.
         if let Some((tt_score, tt_mov)) = self.get_transposition(alpha, beta, depth) {
             self.tt_hits += 1;
 
@@ -279,7 +274,7 @@ impl AI {
             let tt_move_score;
             if let Some((score, exact)) = tt_score {
                 if exact {
-                    self.tt_cutoffs += 1;
+                    self.cutoffs += 1;
                     return score;
                 }
                 tt_move_score = score;
@@ -291,7 +286,7 @@ impl AI {
 
             // In this case we track beta cutoffs as transposition table cutoffs.
             if tt_move_score >= beta {
-                self.tt_cutoffs += 1;
+                self.cutoffs += 1;
                 self.insert_transposition(ScoreType::LowerBound(beta), Some(tt_mov), depth, false);
                 return beta;
             }
@@ -317,7 +312,7 @@ impl AI {
             self.internal_unmake_move(mov);
 
             if score >= beta {
-                self.beta_cutoffs += 1;
+                self.cutoffs += 1;
                 self.insert_transposition(ScoreType::LowerBound(beta), Some(mov), depth, false);
                 return beta;
             }
@@ -392,10 +387,9 @@ impl AI {
         // reset statistics
         self.visited_nodes = 0;
         self.visited_leaf_nodes = 0;
-        self.beta_cutoffs = 0;
+        self.cutoffs = 0;
         self.tt_lookups = 0;
         self.tt_hits = 0;
-        self.tt_cutoffs = 0;
         self.pv_nullsearches = 0;
         self.pv_failed_nullsearches = 0;
         self.transpositions.insertion = 0;
@@ -444,17 +438,13 @@ impl AI {
         let elapsed = end-self.start;
         let secs = elapsed.as_secs() as f64 + elapsed.subsec_nanos() as f64 / 1_000_000_000.0;
         let interior_nodes = self.visited_nodes - self.visited_leaf_nodes;
-        let total_cutoffs = self.tt_cutoffs + self.beta_cutoffs;
         if self.print_statistics {
             println!("  nodes | total   {} ({:.3} knodes/s)", self.visited_nodes, self.visited_nodes as f64 / secs / 1000.0);
             println!("        | leaf    {} ({:.2}%)", self.visited_leaf_nodes, 100.0 * self.visited_leaf_nodes as f64 / self.visited_nodes as f64);
             println!("        | inner   {} ({:.2}%)", interior_nodes, 100.0 * interior_nodes as f64 / self.visited_nodes as f64);
-            println!("cutoffs | beta    {} ({:.2}%)", self.beta_cutoffs, 100.0 * self.beta_cutoffs as f64 / interior_nodes as f64);
-            println!("        | TT      {} ({:.2}%)", self.tt_cutoffs, 100.0 * self.tt_cutoffs as f64 / interior_nodes as f64);
-            println!("        | total   {} ({:.2}%)", total_cutoffs, 100.0 * total_cutoffs as f64 / interior_nodes as f64);
+            println!("cutoffs | total   {} ({:.2}%)", self.cutoffs, 100.0 * self.cutoffs as f64 / interior_nodes as f64);
             println!("     TT | lookups {}", self.tt_lookups);
             println!("        | hits    {} ({:.2}%)", self.tt_hits, 100.0 * self.tt_hits as f64 / self.tt_lookups as f64);
-            println!("        | cutoffs {} ({:.2}%)", self.tt_cutoffs, 100.0 * self.tt_cutoffs as f64 / self.tt_hits as f64);
             println!("        | size    {} ({} MB)", self.transpositions.len(), (self.transpositions.len() * ::std::mem::size_of::<Option<(InternalGameState, Transposition)>>()) / (1024*1024));
             println!("        | insert  {}", self.transpositions.insertion);
             println!("        | update  {} ({:.2}%)", self.transpositions.update, 100.0 * self.transpositions.update as f64 / self.transpositions.insertion as f64);
