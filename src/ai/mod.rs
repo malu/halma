@@ -128,15 +128,14 @@ impl AI {
 
         self.visited_nodes += 1;
 
-        // Tracks the number of moves tried in this position. We use this to distinguish between
-        // the first move we try (which we expect to be the best/principal variation) and the other
-        // moves (which we first try to evaluate using a null window). Additionally, the statistic
-        // how often we explore 0, 1, .., 6 and 7 or more moves is nice.
+        // Tracks the number of moves tried in this position.
         let mut moves_explored = 0;
         let mut alpha = alpha;
 
-        // Whether we found any move which increases alpha and did not exceed beta.
-        let mut is_exact = false;
+        // Whether we found any move which increases alpha and did not exceed beta. After a move
+        // increased alpha, we search all remaining moves using a null-window first and only do a
+        // full-window research it we failed high.
+        let mut raised_alpha = false;
 
         // The best response we found.
         let mut best_move = None;
@@ -154,9 +153,6 @@ impl AI {
             if let Some(score) = tt_score {
                 tt_move_score = score;
             } else {
-                // There is no possible path in which we evaluate another move first. Hence we can
-                // skip the check whether this is the first evaluated move.
-                assert!(moves_explored == 0);
                 self.internal_make_move(tt_mov);
                 tt_move_score = -self.search_negamax(ply+1, -beta, -alpha, depth-ONE_PLY, pv);
                 self.internal_unmake_move(tt_mov);
@@ -172,7 +168,7 @@ impl AI {
             }
 
             if tt_move_score > alpha {
-                is_exact = true;
+                raised_alpha = true;
                 best_move = Some(tt_mov);
                 alpha = tt_move_score;
             }
@@ -199,7 +195,7 @@ impl AI {
             // Only the first move is evaluated with maximum depth. All other moves are first
             // evaluated using a null window and a shallower depth. If the null window evaluation
             // fails high, we retry using the full window.
-            if moves_explored == 0 {
+            if !raised_alpha {
                 score = -self.search_negamax(ply+1, -beta, -alpha, depth-ONE_PLY, pv);
             } else {
                 if pv {
@@ -224,13 +220,13 @@ impl AI {
             }
 
             if score > alpha {
-                is_exact = true;
+                raised_alpha = true;
                 best_move = Some(mov);
                 alpha = score;
             }
         }
 
-        if is_exact {
+        if raised_alpha {
             self.insert_transposition(Evaluation::Exact(alpha), best_move, depth, pv);
         } else {
             self.insert_transposition(Evaluation::UpperBound(alpha), best_move, depth, pv);
