@@ -2,7 +2,7 @@ use ai::{IncrementalHash, Score};
 use ai::internal_game_state::{InternalGameState, InternalMove};
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
-pub enum Evaluation {
+pub enum ScoreType {
     Exact(Score),
     LowerBound(Score),
     UpperBound(Score)
@@ -10,7 +10,7 @@ pub enum Evaluation {
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub struct Transposition {
-    pub evaluation: Evaluation,
+    pub evaluation: ScoreType,
     pub best_move: InternalMove,
     pub depth: isize,
     pub ply: usize,

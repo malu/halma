@@ -1,13 +1,13 @@
 use {GameState, Move};
 
 mod bitboard;
-mod evaluation_cache;
+pub mod evaluation;
 mod incremental_hasher;
 mod internal_game_state;
 mod move_list_iterator;
 mod tt;
 
-use self::evaluation_cache::*;
+use self::evaluation::Evaluation;
 use self::incremental_hasher::*;
 use self::internal_game_state::*;
 use self::move_list_iterator::*;
@@ -32,7 +32,7 @@ pub struct AI {
     stop_condition_triggered: bool,
     start: ::std::time::Instant,
     transpositions: TranspositionTable,
-    evaluation_cache: EvaluationCache,
+    evaluation: Evaluation,
     visited_nodes: usize,
     visited_leaf_nodes: usize,
     beta_cutoffs: usize,
@@ -55,7 +55,7 @@ impl AI {
             stop_condition: StopCondition::Depth(0),
             stop_condition_triggered: false,
             start: ::std::time::Instant::now(),
-            evaluation_cache: EvaluationCache::from(&state),
+            evaluation: Evaluation::from(&state),
             transpositions: TranspositionTable::default(),
             visited_nodes: 0,
             visited_leaf_nodes: 0,
@@ -82,7 +82,7 @@ impl AI {
     }
 
     fn internal_make_move(&mut self, mov: InternalMove) {
-        self.evaluation_cache.update(self.state.current_player, mov);
+        self.evaluation.make_move(self.state.current_player, mov);
         self.update_hash(mov);
         self.state.move_piece(mov);
     }
@@ -94,8 +94,8 @@ impl AI {
 
     fn internal_unmake_move(&mut self, mov: InternalMove) {
         self.state.move_piece(mov.inverse());
-        self.evaluation_cache.update(self.state.current_player, mov.inverse());
         self.update_hash(mov.inverse());
+        self.evaluation.unmake_move(self.state.current_player, mov);
     }
 
     fn should_stop(&mut self, ply: isize) -> bool {
@@ -123,7 +123,7 @@ impl AI {
 
     fn search_pv(&mut self, ply: isize, alpha: Score, beta: Score, depth: isize) -> Score {
         if self.should_stop(ply) {
-            return self.evaluate_position();
+            return self.evaluation.evaluate(self.state.current_player);
         }
 
         self.visited_nodes += 1;
@@ -135,7 +135,7 @@ impl AI {
 
         // 2. Check if we ran out of depth and have to evaluate the position staticly.
         if depth < ONE_PLY {
-            return self.evaluate_position();
+            return self.evaluation.evaluate(self.state.current_player);
         }
 
         // Tracks the number of moves tried in this position.
@@ -175,7 +175,7 @@ impl AI {
             // In this case we track beta cutoffs as transposition table cutoffs.
             if tt_move_score >= beta {
                 self.tt_cutoffs += 1;
-                self.insert_transposition(Evaluation::LowerBound(beta), Some(tt_mov), depth, true);
+                self.insert_transposition(ScoreType::LowerBound(beta), Some(tt_mov), depth, true);
                 self.moves_explored[::std::cmp::min(7, moves_explored)] += 1;
                 return beta;
             }
@@ -225,7 +225,7 @@ impl AI {
 
             if score >= beta {
                 self.beta_cutoffs += 1;
-                self.insert_transposition(Evaluation::LowerBound(beta), Some(mov), depth, true);
+                self.insert_transposition(ScoreType::LowerBound(beta), Some(mov), depth, true);
                 self.moves_explored[::std::cmp::min(7, moves_explored)] += 1;
                 return beta;
             }
@@ -238,9 +238,9 @@ impl AI {
         }
 
         if raised_alpha {
-            self.insert_transposition(Evaluation::Exact(alpha), best_move, depth, true);
+            self.insert_transposition(ScoreType::Exact(alpha), best_move, depth, true);
         } else {
-            self.insert_transposition(Evaluation::UpperBound(alpha), best_move, depth, true);
+            self.insert_transposition(ScoreType::UpperBound(alpha), best_move, depth, true);
         }
 
         self.moves_explored[::std::cmp::min(7, moves_explored)] += 1;
@@ -249,7 +249,7 @@ impl AI {
 
     fn search_null_window(&mut self, ply: isize, beta: Score, depth: isize) -> Score {
         if self.should_stop(ply) {
-            return self.evaluate_position();
+            return self.evaluation.evaluate(self.state.current_player);
         }
 
         self.visited_nodes += 1;
@@ -261,7 +261,8 @@ impl AI {
 
         // 2. Check if we ran out of depth and have to evaluate the position staticly.
         if depth < ONE_PLY {
-            return self.evaluate_position();
+            self.visited_leaf_nodes += 1;
+            return self.evaluation.evaluate(self.state.current_player);
         }
 
         let alpha = beta-1;
@@ -291,7 +292,7 @@ impl AI {
             // In this case we track beta cutoffs as transposition table cutoffs.
             if tt_move_score >= beta {
                 self.tt_cutoffs += 1;
-                self.insert_transposition(Evaluation::LowerBound(beta), Some(tt_mov), depth, false);
+                self.insert_transposition(ScoreType::LowerBound(beta), Some(tt_mov), depth, false);
                 return beta;
             }
         }
@@ -317,7 +318,7 @@ impl AI {
 
             if score >= beta {
                 self.beta_cutoffs += 1;
-                self.insert_transposition(Evaluation::LowerBound(beta), Some(mov), depth, false);
+                self.insert_transposition(ScoreType::LowerBound(beta), Some(mov), depth, false);
                 return beta;
             }
         }
@@ -325,23 +326,7 @@ impl AI {
         alpha
     }
 
-    fn evaluate_position(&mut self) -> Score {
-        self.visited_leaf_nodes += 1;
-
-        let mut score = 0;
-        score += self.evaluation_cache.score_dist_last_piece();
-        score += self.evaluation_cache.score_total_distance();
-        score += self.evaluation_cache.score_centralization();
-        score += self.evaluation_cache.score_kinds()/10;
-
-        if self.state.current_player == 0 {
-            score
-        } else {
-            -score
-        }
-    }
-
-    fn insert_transposition(&mut self, evaluation: Evaluation, best_move: Option<InternalMove>, depth: isize, pv: bool) {
+    fn insert_transposition(&mut self, evaluation: ScoreType, best_move: Option<InternalMove>, depth: isize, pv: bool) {
         if best_move == None {
             return;
         }
@@ -386,13 +371,13 @@ impl AI {
             }
 
             match transposition.evaluation {
-                Evaluation::Exact(score) => return Some((Some((score, true)), mov)),
-                Evaluation::LowerBound(lower_bound) => {
+                ScoreType::Exact(score) => return Some((Some((score, true)), mov)),
+                ScoreType::LowerBound(lower_bound) => {
                     if lower_bound >= beta {
                         return Some((Some((beta, false)), mov));
                     }
                 }
-                Evaluation::UpperBound(upper_bound) => {
+                ScoreType::UpperBound(upper_bound) => {
                     if upper_bound <= alpha {
                         return Some((Some((alpha, false)), mov));
                     }
