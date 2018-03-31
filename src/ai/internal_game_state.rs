@@ -25,33 +25,37 @@ impl InternalGameState {
         self.pieces[player as usize] == BB_TARGET[player as usize]
     }
 
-    fn moves_from(&self, from: BitIndex) -> Vec<InternalMove> {
-        let mut result = Bitboard::default();
-        let mut jumping_targets = Bitboard::bit(from);
+    fn reachable_from(&self, from: BitIndex) -> Bitboard {
+        let mut result;
+        let mut jumping_targets = Bitboard::default();
+        let mut next_jumping_targets = Bitboard::bit(from);
 
-        let skip_bb = !BB_INVALID & self.occupied_bb();
-        let empty_bb = !BB_INVALID & self.empty_bb();
+        let occupied = self.occupied_bb();
+        let empty = !BB_INVALID & self.empty_bb();
 
-        while let Some(reachable) = jumping_targets.pop() {
+        while jumping_targets != next_jumping_targets {
+            jumping_targets = next_jumping_targets;
+
+            // shift left
             for &(skip, jump) in &[
-                (255, 254), // west
                 (  1,   2), // east
                 ( 13,  26), // south west
                 ( 14,  28), // south east
-                (243, 230), // north east
-                (242, 228), // north west
             ] {
-                let skip = reachable.wrapping_add(skip);
-                let jump = reachable.wrapping_add(jump);
+                next_jumping_targets = next_jumping_targets | ((occupied << skip) & empty & (jumping_targets << jump));
+            }
 
-                let jump_bb = empty_bb & !jumping_targets & !result;
-
-                if skip_bb.get_bit(skip) && jump_bb.get_bit(jump) {
-                    jumping_targets.set_bit(jump);
-                    result.set_bit(jump);
-                }
+            // shift right
+            for &(skip, jump) in &[
+                ( 1,  2), // west
+                (13, 26), // north east
+                (14, 28), // north west
+            ] {
+                next_jumping_targets = next_jumping_targets | ((occupied >> skip) & empty & (jumping_targets >> jump));
             }
         }
+
+        result = jumping_targets;
 
         for &slide in &[
             255,
@@ -62,19 +66,26 @@ impl InternalGameState {
             242,
         ] {
             let to = from.wrapping_add(slide);
-            if empty_bb.get_bit(to) {
+            if empty.get_bit(to) {
                 result.set_bit(to);
             }
         }
 
-        assert!(result.ones().all(|to| from != to));
-        result.ones().map(|to| InternalMove { from, to }).collect()
+        result.unset_bit(from);
+
+        assert!(!result.get_bit(from));
+        result
     }
 
     pub fn possible_moves(&self) -> Vec<InternalMove> {
         let board = self.pieces[self.current_player as usize];
+        let mut result = Vec::with_capacity(256);
 
-        board.ones().flat_map(|i| self.moves_from(i)).collect()
+        for from in board.ones() {
+            result.extend(self.reachable_from(from).ones().map(|to| InternalMove { from, to } ));
+        }
+
+        result
     }
 
     pub fn move_piece(&mut self, mov: InternalMove) {
@@ -156,3 +167,16 @@ impl From<GameState> for InternalGameState {
     }
 }
 
+mod tests{
+    #[test]
+    fn test_pos_to_index() {
+        use ai::internal_game_state::pos_to_index;
+        assert_eq!(pos_to_index(6, 0), 0x06);
+        assert_eq!(pos_to_index(6, 1), 0x13);
+        assert_eq!(pos_to_index(7, 1), 0x14);
+        assert_eq!(pos_to_index(5, 2), 0x20);
+        assert_eq!(pos_to_index(6, 2), 0x21);
+        assert_eq!(pos_to_index(7, 2), 0x22);
+        assert_eq!(pos_to_index(6, 16), 0xDE);
+    }
+}

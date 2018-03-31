@@ -1,4 +1,4 @@
-use std::ops::{BitAnd, BitOr, BitXor, Not};
+use std::ops::{BitAnd, BitOr, BitXor, Not, Shr, Shl};
 
 // We interpret the values in the following layout:
 //  **00**01**02**03**04**05*/06\*07**08**09**0A**0B**0C****
@@ -212,16 +212,50 @@ impl Not for Bitboard {
     }
 }
 
+impl Shr<u8> for Bitboard {
+    type Output = Self;
+
+    fn shr(self, bits: u8) -> Self {
+        assert!(bits < 64);
+        Bitboard([
+                 (self.0[0] >> bits) | (self.0[1] << (64 - bits)),
+                 (self.0[1] >> bits) | (self.0[2] << (64 - bits)),
+                 (self.0[2] >> bits) | (self.0[3] << (64 - bits)),
+                 self.0[3] >> bits,
+        ])
+    }
+}
+
+impl Shl<u8> for Bitboard {
+    type Output = Self;
+
+    fn shl(self, bits: u8) -> Self {
+        assert!(bits < 64);
+        Bitboard([
+                 self.0[0] << bits,
+                 (self.0[1] << bits) | (self.0[0] >> (64 - bits)),
+                 (self.0[2] << bits) | (self.0[1] >> (64 - bits)),
+                 (self.0[3] << bits) | (self.0[2] >> (64 - bits)),
+        ])
+    }
+}
+
 mod tests {
     #[test]
-    fn test_pos_to_index() {
-        use ai::internal_game_state::pos_to_index;
-        assert_eq!(pos_to_index(6, 0), 0x06);
-        assert_eq!(pos_to_index(6, 1), 0x13);
-        assert_eq!(pos_to_index(7, 1), 0x14);
-        assert_eq!(pos_to_index(5, 2), 0x20);
-        assert_eq!(pos_to_index(6, 2), 0x21);
-        assert_eq!(pos_to_index(7, 2), 0x22);
-        assert_eq!(pos_to_index(6, 16), 0xDE);
+    fn test_bitboard_shr() {
+        use ai::bitboard::Bitboard;
+        let bb =       Bitboard([0x0123456789ABCDEF, 0x23456789ABCDEF12, 0x456789ABCDEF0123, 0x6789ABCDEF012345]);
+        let result8 =  Bitboard([0x120123456789ABCD, 0x2323456789ABCDEF, 0x45456789ABCDEF01, 0x006789ABCDEF0123]);
+        let result32 = Bitboard([0xABCDEF1201234567, 0xCDEF012323456789, 0xEF012345456789AB, 0x000000006789ABCD]);
+        assert_eq!(bb >> 8, result8);
+        assert_eq!(bb >> 32, result32);
+    }
+
+    #[test]
+    fn test_bitboard_shl() {
+        use ai::bitboard::Bitboard;
+        let bb =       Bitboard([0xABCDEF1201234567, 0xCDEF012323456789, 0xEF012345456789AB, 0x000000006789ABCD]);
+        let result32 = Bitboard([0x0123456700000000, 0x23456789ABCDEF12, 0x456789ABCDEF0123, 0x6789ABCDEF012345]);
+        assert_eq!(bb << 32, result32);
     }
 }
