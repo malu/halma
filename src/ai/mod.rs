@@ -133,20 +133,13 @@ impl AI {
 
         // 2. Check if we ran out of depth and have to evaluate the position staticly.
         if depth < ONE_PLY {
+            self.visited_leaf_nodes += 1;
             return self.evaluation.evaluate(self.state.current_player);
         }
 
-        // Tracks the number of moves tried in this position.
-        let mut moves_explored = 0;
-        let mut alpha = alpha;
-
-        // Whether we found any move which increases alpha and did not exceed beta. After a move
-        // increased alpha, we search all remaining moves using a null-window first and only do a
-        // full-window research it we failed high.
-        let mut raised_alpha = false;
-
-        // The best response we found.
-        let mut best_move = None;
+        // A list of known good moves. These will be evaluated first to get early curoffs of alpha
+        // increases.
+        let mut known_good_moves = Vec::new();
 
         // 3. Lookup current position in transposition table. If we encountered this position
         //    before, previous evaluations or best moves are useful to get an early beta cutoff.
@@ -154,9 +147,8 @@ impl AI {
             self.tt_hits += 1;
 
             // tt_score is not None if the position in the transposition table was evaluated to a
-            // higher depth. In that case we will not reevaluate but use the score as is. Otherwise
-            // evaluate this move as any other move.
-            let tt_move_score;
+            // higher depth. If in that case the score is also exact, we return with this score.
+            // Otherwise we add it to our list of known good moves.
             if let Some((score, exact)) = tt_score {
                 if exact {
                     self.cutoffs += 1;
@@ -164,23 +156,7 @@ impl AI {
                 }
             }
 
-            self.internal_make_move(tt_mov);
-            tt_move_score = -self.search_pv(ply+1, -beta, -alpha, depth-ONE_PLY);
-            self.internal_unmake_move(tt_mov);
-            moves_explored += 1;
-
-            if tt_move_score >= beta {
-                self.cutoffs += 1;
-                self.insert_transposition(ScoreType::LowerBound(beta), Some(tt_mov), depth, true);
-                self.moves_explored[::std::cmp::min(7, moves_explored)] += 1;
-                return beta;
-            }
-
-            if tt_move_score > alpha {
-                raised_alpha = true;
-                best_move = Some(tt_mov);
-                alpha = tt_move_score;
-            }
+            known_good_moves.push(tt_mov);
         }
 
         // We score the moves (for ordering purposes) by how far they advance along the board.
@@ -193,11 +169,24 @@ impl AI {
             }
         };
 
+        // Tracks the number of moves tried in this position.
+        let mut moves_explored = 0;
+
+        // Whether we found any move which increases alpha and did not exceed beta. After a move
+        // increased alpha, we search all remaining moves using a null-window first and only do a
+        // full-window research it we failed high.
+        let mut raised_alpha = false;
+        let mut alpha = alpha;
+
+        // The best response we found.
+        let mut best_move = None;
+
+        let moves = known_good_moves.into_iter().chain(self.state.possible_moves().order(8, score_move_order));
         // 4. Evaluate remaining moves. We first try the 8 highest rated moves (with respect to the
         //    move ordering score above). If we did not get a beta cutoff during these 8 moves, we
         //    try the remaining moves in any order because the move ordering seems bad and we give
         //    up sorting.
-        for mov in self.state.possible_moves().order(8, score_move_order) {
+        for mov in moves {
             self.internal_make_move(mov);
             let score;
 
@@ -208,7 +197,7 @@ impl AI {
                 score = -self.search_pv(ply+1, -beta, -alpha, depth-ONE_PLY);
             } else {
                 self.pv_nullsearches += 1;
-                let null_score = -self.search_null_window(ply+1, -alpha, depth-ONE_PLY);
+                let null_score = -self.search_null(ply+1, -alpha, depth-ONE_PLY);
                 if null_score > alpha {
                     self.pv_failed_nullsearches += 1;
                     score = -self.search_pv(ply+1, -beta, -alpha, depth-ONE_PLY);
@@ -243,7 +232,7 @@ impl AI {
         alpha
     }
 
-    fn search_null_window(&mut self, ply: isize, beta: Score, depth: isize) -> Score {
+    fn search_null(&mut self, ply: isize, beta: Score, depth: isize) -> Score {
         if self.should_stop(ply) {
             return self.evaluation.evaluate(self.state.current_player);
         }
@@ -263,6 +252,10 @@ impl AI {
 
         let alpha = beta-1;
 
+        // A list of known good moves. These will be evaluated first to get early curoffs of alpha
+        // increases.
+        let mut known_good_moves = Vec::new();
+
         // 3. Lookup current position in transposition table. If we encountered this position
         //    before, previous evaluations or best moves are useful to get an early beta cutoff.
         if let Some((tt_score, tt_mov)) = self.get_transposition(alpha, beta, depth) {
@@ -271,25 +264,20 @@ impl AI {
             // tt_score is not None if the position in the transposition table was evaluated to a
             // higher depth. In that case we will not reevaluate but use the score as is. Otherwise
             // evaluate this move as any other move.
-            let tt_move_score;
             if let Some((score, exact)) = tt_score {
                 if exact {
                     self.cutoffs += 1;
                     return score;
                 }
-                tt_move_score = score;
+
+                if score >= beta {
+                    self.cutoffs += 1;
+                    return beta;
+                }
             } else {
-                self.internal_make_move(tt_mov);
-                tt_move_score = -self.search_null_window(ply+1, -alpha, depth-ONE_PLY);
-                self.internal_unmake_move(tt_mov);
+                known_good_moves.push(tt_mov);
             }
 
-            // In this case we track beta cutoffs as transposition table cutoffs.
-            if tt_move_score >= beta {
-                self.cutoffs += 1;
-                self.insert_transposition(ScoreType::LowerBound(beta), Some(tt_mov), depth, false);
-                return beta;
-            }
         }
 
         // We score the moves (for ordering purposes) by how far they advance along the board.
@@ -302,13 +290,14 @@ impl AI {
             }
         };
 
+        let moves = known_good_moves.into_iter().chain(self.state.possible_moves().order(8, score_move_order));
         // 4. Evaluate remaining moves. We first try the 8 highest rated moves (with respect to the
         //    move ordering score above). If we did not get a beta cutoff during these 8 moves, we
         //    try the remaining moves in any order because the move ordering seems bad and we give
         //    up sorting.
-        for mov in self.state.possible_moves().order(8, score_move_order) {
+        for mov in moves {
             self.internal_make_move(mov);
-            let score = -self.search_null_window(ply+1, -alpha, depth-ONE_PLY);
+            let score = -self.search_null(ply+1, -alpha, depth-ONE_PLY);
             self.internal_unmake_move(mov);
 
             if score >= beta {
