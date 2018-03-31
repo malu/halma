@@ -98,35 +98,45 @@ impl AI {
         self.update_hash(mov.inverse());
     }
 
-    fn search_negamax(&mut self, ply: isize, alpha: Score, beta: Score, depth: isize, pv: bool) -> Score {
+    fn should_stop(&mut self, ply: isize) -> bool {
+        if ply == 0 {
+            return false;
+        }
+
         if self.stop_condition_triggered {
-            return self.evaluate_position();
-        }
-
-        // 1. Check if we lost.
-        if self.state.won(1-self.state.current_player) {
-            self.visited_nodes += 1;
-            return -WINNING_SCORE+ply;
-        }
-
-        // 2. Check if we ran out of depth and have to evaluate the position staticly.
-        if depth < ONE_PLY {
-            self.visited_nodes += 1;
-            return self.evaluate_position();
+            return true;
         }
 
         if self.visited_nodes & 0x7FF == 0 {
             if let StopCondition::Time(dur) = self.stop_condition {
                 let time_taken = ::std::time::Instant::now() - self.start;
                 let remaining = dur.checked_sub(time_taken);
-                if remaining == None || remaining.unwrap() < ::std::time::Duration::new(0, ply as u32*5_000_000) {
+                if remaining == None || remaining.unwrap() < ::std::time::Duration::new(0, ply as u32*4*1024*1024) {
                     self.stop_condition_triggered = true;
-                    return self.evaluate_position();
+                    return true;
                 }
             }
         }
 
+        false
+    }
+
+    fn search_negamax(&mut self, ply: isize, alpha: Score, beta: Score, depth: isize) -> Score {
+        if self.should_stop(ply) {
+            return self.evaluate_position();
+        }
+
         self.visited_nodes += 1;
+
+        // 1. Check if we lost.
+        if self.state.won(1-self.state.current_player) {
+            return -WINNING_SCORE+ply;
+        }
+
+        // 2. Check if we ran out of depth and have to evaluate the position staticly.
+        if depth < ONE_PLY {
+            return self.evaluate_position();
+        }
 
         // Tracks the number of moves tried in this position.
         let mut moves_explored = 0;
@@ -154,7 +164,7 @@ impl AI {
                 tt_move_score = score;
             } else {
                 self.internal_make_move(tt_mov);
-                tt_move_score = -self.search_negamax(ply+1, -beta, -alpha, depth-ONE_PLY, pv);
+                tt_move_score = -self.search_negamax(ply+1, -beta, -alpha, depth-ONE_PLY);
                 self.internal_unmake_move(tt_mov);
                 moves_explored += 1;
             }
@@ -162,7 +172,7 @@ impl AI {
             // In this case we track beta cutoffs as transposition table cutoffs.
             if tt_move_score >= beta {
                 self.tt_cutoffs += 1;
-                self.insert_transposition(Evaluation::LowerBound(beta), Some(tt_mov), depth, pv);
+                self.insert_transposition(Evaluation::LowerBound(beta), Some(tt_mov), depth, true);
                 self.moves_explored[::std::cmp::min(7, moves_explored)] += 1;
                 return beta;
             }
@@ -196,15 +206,13 @@ impl AI {
             // evaluated using a null window and a shallower depth. If the null window evaluation
             // fails high, we retry using the full window.
             if !raised_alpha {
-                score = -self.search_negamax(ply+1, -beta, -alpha, depth-ONE_PLY, pv);
+                score = -self.search_negamax(ply+1, -beta, -alpha, depth-ONE_PLY);
             } else {
-                if pv {
-                    self.pv_nullsearches += 1;
-                }
-                let null_score = -self.search_negamax(ply+1, -alpha-1, -alpha, depth-ONE_PLY, false);
-                if null_score > alpha && pv {
+                self.pv_nullsearches += 1;
+                let null_score = -self.search_null_window(ply+1, -alpha, depth-ONE_PLY);
+                if null_score > alpha {
                     self.pv_failed_nullsearches += 1;
-                    score = -self.search_negamax(ply+1, -beta, -alpha, depth-ONE_PLY, pv);
+                    score = -self.search_negamax(ply+1, -beta, -alpha, depth-ONE_PLY);
                 } else {
                     score = null_score;
                 }
@@ -214,7 +222,7 @@ impl AI {
 
             if score >= beta {
                 self.beta_cutoffs += 1;
-                self.insert_transposition(Evaluation::LowerBound(beta), Some(mov), depth, pv);
+                self.insert_transposition(Evaluation::LowerBound(beta), Some(mov), depth, true);
                 self.moves_explored[::std::cmp::min(7, moves_explored)] += 1;
                 return beta;
             }
@@ -227,12 +235,86 @@ impl AI {
         }
 
         if raised_alpha {
-            self.insert_transposition(Evaluation::Exact(alpha), best_move, depth, pv);
+            self.insert_transposition(Evaluation::Exact(alpha), best_move, depth, true);
         } else {
-            self.insert_transposition(Evaluation::UpperBound(alpha), best_move, depth, pv);
+            self.insert_transposition(Evaluation::UpperBound(alpha), best_move, depth, true);
         }
 
         self.moves_explored[::std::cmp::min(7, moves_explored)] += 1;
+        alpha
+    }
+
+    fn search_null_window(&mut self, ply: isize, beta: Score, depth: isize) -> Score {
+        if self.should_stop(ply) {
+            return self.evaluate_position();
+        }
+
+        self.visited_nodes += 1;
+
+        // 1. Check if we lost.
+        if self.state.won(1-self.state.current_player) {
+            return -WINNING_SCORE+ply;
+        }
+
+        // 2. Check if we ran out of depth and have to evaluate the position staticly.
+        if depth < ONE_PLY {
+            return self.evaluate_position();
+        }
+
+        let alpha = beta-1;
+
+        // 3. Lookup current position in transposition table. If we encountered this position
+        //    before, previous evaluations or best moves are useful to get an early beta cutoff
+        //    (which in this case will be tracked as a transposition table cutoff in the statistic).
+        if let Some((tt_score, tt_mov)) = self.get_transposition(alpha, beta, depth) {
+            self.tt_hits += 1;
+
+            // tt_score is not None if the position in the transposition table was evaluated to a
+            // higher depth. In that case we will not reevaluate but use the score as is. Otherwise
+            // evaluate this move as any other move.
+            let tt_move_score;
+            if let Some(score) = tt_score {
+                tt_move_score = score;
+            } else {
+                self.internal_make_move(tt_mov);
+                tt_move_score = -self.search_null_window(ply+1, -alpha, depth-ONE_PLY);
+                self.internal_unmake_move(tt_mov);
+            }
+
+            // In this case we track beta cutoffs as transposition table cutoffs.
+            if tt_move_score >= beta {
+                self.tt_cutoffs += 1;
+                self.insert_transposition(Evaluation::LowerBound(beta), Some(tt_mov), depth, false);
+                return beta;
+            }
+        }
+
+        // We score the moves (for ordering purposes) by how far they advance along the board.
+        let current_player = self.state.current_player;
+        let score_move_order = |mov: InternalMove| -> isize {
+            if current_player == 0 {
+                mov.to as isize - mov.from as isize
+            } else {
+                mov.from as isize - mov.to as isize
+            }
+        };
+
+        // 4. Evaluate remaining moves. We first try the 8 highest rated moves (with respect to the
+        //    move ordering score above). If we did not get a beta cutoff during these 8 moves, we
+        //    try the remaining moves in any order because the move ordering seems bad and we give
+        //    up sorting.
+        for mov in self.state.possible_moves().order(8, score_move_order) {
+            self.internal_make_move(mov);
+            let score = -self.search_null_window(ply+1, -alpha, depth-ONE_PLY);
+            self.internal_unmake_move(mov);
+
+            if score >= beta {
+                self.beta_cutoffs += 1;
+                self.insert_transposition(Evaluation::LowerBound(beta), Some(mov), depth, false);
+                return beta;
+            }
+        }
+
         alpha
     }
 
@@ -339,8 +421,8 @@ impl AI {
         self.stop_condition_triggered = false;
         //println!("Search depth:  {}", depth);
         self.start = ::std::time::Instant::now();
-        let alpha = -Score::max_value();
-        let beta = Score::max_value();
+        let alpha = -WINNING_SCORE;
+        let beta = WINNING_SCORE;
         for d in 1.. {
             match self.stop_condition {
                 StopCondition::Depth(stop_depth) => {
@@ -354,15 +436,15 @@ impl AI {
                     let remaining = dur.checked_sub(time_taken);
                     if remaining == None || remaining.unwrap() < ::std::time::Duration::new(0, 50_000_000) {
                         self.stop_condition_triggered = true;
+                        if self.print_statistics {
+                            println!("Stopping search after depth {}", d-1);
+                        }
                         break;
                 }
             }
             }
 
-            let score = self.search_negamax(0, alpha, beta, d*ONE_PLY, true);
-            if score > Score::max_value()-1000 {
-                break;
-            }
+            self.search_negamax(0, alpha, beta, d*ONE_PLY);
         }
 
         let score;
