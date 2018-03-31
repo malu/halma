@@ -1,4 +1,4 @@
-use std::ops::{BitAnd, BitOr, BitXor, Not, Shr, Shl};
+use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Not, Shr, Shl};
 
 // We interpret the values in the following layout:
 //  **00**01**02**03**04**05*/06\*07**08**09**0A**0B**0C****
@@ -173,6 +173,15 @@ impl BitAnd for Bitboard {
     }
 }
 
+impl BitAndAssign for Bitboard {
+    fn bitand_assign(&mut self, other: Self) {
+        self.0[0] &= other.0[0];
+        self.0[1] &= other.0[1];
+        self.0[2] &= other.0[2];
+        self.0[3] &= other.0[3];
+    }
+}
+
 impl BitOr for Bitboard {
     type Output = Self;
 
@@ -186,6 +195,15 @@ impl BitOr for Bitboard {
     }
 }
 
+impl BitOrAssign for Bitboard {
+    fn bitor_assign(&mut self, other: Self) {
+        self.0[0] |= other.0[0];
+        self.0[1] |= other.0[1];
+        self.0[2] |= other.0[2];
+        self.0[3] |= other.0[3];
+    }
+}
+
 impl BitXor for Bitboard {
     type Output = Self;
 
@@ -196,6 +214,15 @@ impl BitXor for Bitboard {
                  self.0[2] ^ other.0[2], 
                  self.0[3] ^ other.0[3], 
         ])
+    }
+}
+
+impl BitXorAssign for Bitboard {
+    fn bitxor_assign(&mut self, other: Self) {
+        self.0[0] ^= other.0[0];
+        self.0[1] ^= other.0[1];
+        self.0[2] ^= other.0[2];
+        self.0[3] ^= other.0[3];
     }
 }
 

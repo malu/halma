@@ -42,7 +42,7 @@ impl InternalGameState {
                 ( 13,  26), // south west
                 ( 14,  28), // south east
             ] {
-                next_jumping_targets = next_jumping_targets | ((occupied << skip) & empty & (jumping_targets << jump));
+                next_jumping_targets |= (occupied << skip) & empty & (jumping_targets << jump);
             }
 
             // shift right
@@ -51,7 +51,7 @@ impl InternalGameState {
                 (13, 26), // north east
                 (14, 28), // north west
             ] {
-                next_jumping_targets = next_jumping_targets | ((occupied >> skip) & empty & (jumping_targets >> jump));
+                next_jumping_targets |= (occupied >> skip) & empty & (jumping_targets >> jump);
             }
         }
 
@@ -96,13 +96,12 @@ impl InternalGameState {
             panic!("Invalid locations for move_piece: {:X}, {:X}", from, to); 
         }
 
-        let mut bits_to_invert = Bitboard::default();
-        bits_to_invert.set_bit(from);
+        let mut bits_to_invert = Bitboard::bit(from);
         bits_to_invert.set_bit(to);
         if self.pieces[0].get_bit(from) {
-            self.pieces[0] = self.pieces[0] ^ bits_to_invert;
+            self.pieces[0] ^= bits_to_invert;
         } else if self.pieces[1].get_bit(from) {
-            self.pieces[1] = self.pieces[1] ^ bits_to_invert;
+            self.pieces[1] ^= bits_to_invert;
         }
         self.current_player = 1-self.current_player;
     }
