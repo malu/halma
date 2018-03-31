@@ -27,6 +27,7 @@ pub struct AI {
     pub state: InternalGameState,
     pub print_statistics: bool,
     pub stop_condition: StopCondition,
+    stop_condition_triggered: bool,
     start: ::std::time::Instant,
     transpositions: TranspositionTable,
     evaluation_cache: EvaluationCache,
@@ -50,6 +51,7 @@ impl AI {
             state: InternalGameState::from(state),
             print_statistics: false,
             stop_condition: StopCondition::Depth(0),
+            stop_condition_triggered: false,
             start: ::std::time::Instant::now(),
             evaluation_cache: EvaluationCache::from(&state),
             transpositions: TranspositionTable::default(),
@@ -95,6 +97,9 @@ impl AI {
     }
 
     fn search_negamax(&mut self, ply: isize, alpha: Score, beta: Score, depth: isize, pv: bool) -> Score {
+        if self.stop_condition_triggered {
+            return self.evaluate_position();
+        }
 
         // 1. Check if we lost.
         if self.state.won(1-self.state.current_player) {
@@ -113,6 +118,7 @@ impl AI {
                 let time_taken = ::std::time::Instant::now() - self.start;
                 let remaining = dur.checked_sub(time_taken);
                 if remaining == None || remaining.unwrap() < ::std::time::Duration::new(0, ply as u32*5_000_000) {
+                    self.stop_condition_triggered = true;
                     return self.evaluate_position();
                 }
             }
@@ -332,6 +338,7 @@ impl AI {
         self.transpositions.update = 0;
         self.moves_explored = [0; 8];
 
+        self.stop_condition_triggered = false;
         //println!("Search depth:  {}", depth);
         self.start = ::std::time::Instant::now();
         let alpha = -Score::max_value();
@@ -340,6 +347,7 @@ impl AI {
             match self.stop_condition {
                 StopCondition::Depth(stop_depth) => {
                     if stop_depth < d {
+                        self.stop_condition_triggered = true;
                         break;
                     }
                 }
@@ -347,6 +355,7 @@ impl AI {
                     let time_taken = ::std::time::Instant::now() - self.start;
                     let remaining = dur.checked_sub(time_taken);
                     if remaining == None || remaining.unwrap() < ::std::time::Duration::new(0, 50_000_000) {
+                        self.stop_condition_triggered = true;
                         break;
                 }
             }
