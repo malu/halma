@@ -21,6 +21,8 @@ pub enum StopCondition {
 
 type Score = isize;
 
+const WINNING_SCORE: Score = 1_000_000_000;
+
 const ONE_PLY: isize = 1000;
 
 pub struct AI {
@@ -104,7 +106,7 @@ impl AI {
         // 1. Check if we lost.
         if self.state.won(1-self.state.current_player) {
             self.visited_nodes += 1;
-            return -Score::max_value()+ply;
+            return -WINNING_SCORE+ply;
         }
 
         // 2. Check if we ran out of depth and have to evaluate the position staticly.
