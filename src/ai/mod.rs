@@ -55,7 +55,7 @@ impl AI {
             stop_condition_triggered: false,
             start: ::std::time::Instant::now(),
             evaluation: Evaluation::from(&state),
-            transpositions: TranspositionTable::default(),
+            transpositions: TranspositionTable::new(20),
             visited_nodes: 0,
             visited_leaf_nodes: 0,
             cutoffs: 0,
@@ -373,9 +373,6 @@ impl AI {
         self.tt_hits = 0;
         self.pv_nullsearches = 0;
         self.pv_failed_nullsearches = 0;
-        self.transpositions.insertion = 0;
-        self.transpositions.replace = 0;
-        self.transpositions.update = 0;
         self.moves_explored = [0; 8];
 
         self.stop_condition_triggered = false;
@@ -426,10 +423,6 @@ impl AI {
             println!("cutoffs | total   {} ({:.2}%)", self.cutoffs, 100.0 * self.cutoffs as f64 / interior_nodes as f64);
             println!("     TT | lookups {}", self.tt_lookups);
             println!("        | hits    {} ({:.2}%)", self.tt_hits, 100.0 * self.tt_hits as f64 / self.tt_lookups as f64);
-            println!("        | size    {} ({} MB)", self.transpositions.len(), (self.transpositions.len() * ::std::mem::size_of::<Option<(InternalGameState, Transposition)>>()) / (1024*1024));
-            println!("        | insert  {}", self.transpositions.insertion);
-            println!("        | update  {} ({:.2}%)", self.transpositions.update, 100.0 * self.transpositions.update as f64 / self.transpositions.insertion as f64);
-            println!("        | replace {} ({:.2}%)", self.transpositions.replace, 100.0 * self.transpositions.replace as f64 / self.transpositions.insertion as f64);
             println!("     PV | 0-wind. {}", self.pv_nullsearches);
             println!("        | failed  {} ({:.2}%)", self.pv_failed_nullsearches, 100.0 * self.pv_failed_nullsearches  as f64 / self.pv_nullsearches as f64);
             let total_moves_explored = self.moves_explored.iter().sum::<usize>() as f64;

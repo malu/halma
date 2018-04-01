@@ -34,40 +34,28 @@ impl Transposition {
     }
 }
 
-const TT_BITS: usize = 20;
-const TT_SIZE: usize = 1 << TT_BITS;
-
 pub struct TranspositionTable {
     table: Vec<Option<(InternalGameState, Transposition)>>,
-    pub insertion: usize,
-    pub replace: usize,
-    pub update: usize,
+    bitmask: usize,
 }
 
-impl Default for TranspositionTable {
-    fn default() -> Self {
-        let mut table = Vec::with_capacity(TT_SIZE);
+impl TranspositionTable {
+    pub fn new(bits: usize) -> Self {
+        let size = 1 << (bits - 1);
+        let mut table = Vec::with_capacity(size);
 
-        for _ in 0..TT_SIZE {
+        for _ in 0..size {
             table.push(None);
         }
 
         TranspositionTable {
             table,
-            insertion: 0,
-            replace: 0,
-            update: 0,
+            bitmask: size - 1,
         }
-    }
-}
-
-impl TranspositionTable {
-    pub fn len(&self) -> usize {
-        self.table.iter().filter(|option| option.is_some()).count()
     }
 
     pub fn get(&self, hash: IncrementalHash, state: InternalGameState) -> Option<Transposition> {
-        if let Some((tstate, t)) = self.table[hash % TT_SIZE] {
+        if let Some((tstate, t)) = self.table[hash & self.bitmask] {
             if tstate != state {
                 return None;
             } else {
@@ -79,16 +67,7 @@ impl TranspositionTable {
     }
 
     pub fn insert(&mut self, hash: IncrementalHash, state: InternalGameState, transposition: Transposition) {
-        self.insertion += 1;
-        if let Some((tstate, _)) = self.table[hash % TT_SIZE] {
-            if tstate == state {
-                self.update += 1;
-            } else {
-                self.replace += 1;
-            }
-        }
-
-        self.table[hash % TT_SIZE] = Some((state, transposition));
+        self.table[hash & self.bitmask] = Some((state, transposition));
     }
 }
 
