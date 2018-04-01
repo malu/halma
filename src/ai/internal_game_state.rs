@@ -57,12 +57,12 @@ impl InternalGameState {
         }
 
         for &slide in &[
-            255,
-              1,
-             13,
-             14,
-            243,
-            242,
+            255, // west
+              1, // east
+             13, // south west
+             14, // south east
+            243, // north west
+            242, // north east
         ] {
             let to = from.wrapping_add(slide);
             jumping_targets.set_bit(to);
@@ -82,22 +82,16 @@ impl InternalGameState {
         result
     }
 
-    pub fn move_piece(&mut self, mov: InternalMove) {
-        let from = mov.from;
-        let to = mov.to;
-
-        if !InternalGameState::is_valid_location(from) || !InternalGameState::is_valid_location(to) {
-            panic!("Invalid locations for move_piece: {:X}, {:X}", from, to); 
-        }
-
-        let mut bits_to_invert = Bitboard::bit(from);
-        bits_to_invert.set_bit(to);
-        if self.pieces[0].get_bit(from) {
-            self.pieces[0] ^= bits_to_invert;
-        } else if self.pieces[1].get_bit(from) {
-            self.pieces[1] ^= bits_to_invert;
-        }
+    pub fn make_move(&mut self, mov: InternalMove) {
+        self.pieces[self.current_player as usize].set_bit(mov.to);
+        self.pieces[self.current_player as usize].unset_bit(mov.from);
         self.current_player = 1-self.current_player;
+    }
+
+    pub fn unmake_move(&mut self, mov: InternalMove) {
+        self.current_player = 1-self.current_player;
+        self.pieces[self.current_player as usize].set_bit(mov.from);
+        self.pieces[self.current_player as usize].unset_bit(mov.to);
     }
 }
 
@@ -141,9 +135,6 @@ impl From<GameState> for InternalGameState {
         for x in 0..BOARD_WIDTH {
             for y in 0..BOARD_HEIGHT {
                 if let Tile::Player(player) = state.get(x as i8, y as i8) {
-                    if BB_INVALID.get_bit(pos_to_index(x, y)) {
-                        println!("{} {}: {2} hex: {2:X}", x, y, pos_to_index(x, y));
-                    }
                     pieces[player as usize].set_bit(pos_to_index(x, y));
                 }
             }

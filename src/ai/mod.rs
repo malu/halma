@@ -82,7 +82,7 @@ impl AI {
     fn internal_make_move(&mut self, mov: InternalMove) {
         self.evaluation.make_move(self.state.current_player, mov);
         self.update_hash(mov);
-        self.state.move_piece(mov);
+        self.state.make_move(mov);
     }
 
     pub fn unmake_move(&mut self, mov: Move) {
@@ -91,7 +91,7 @@ impl AI {
     }
 
     fn internal_unmake_move(&mut self, mov: InternalMove) {
-        self.state.move_piece(mov.inverse());
+        self.state.unmake_move(mov);
         self.update_hash(mov.inverse());
         self.evaluation.unmake_move(self.state.current_player, mov);
     }
