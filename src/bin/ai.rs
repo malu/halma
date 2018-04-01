@@ -25,9 +25,9 @@ fn main() {
         } else if line.starts_with("getmove") {
             let mov = ai.calculate_move();
             println!("{}", serde_json::to_string(&mov).unwrap());
-        } else if line.starts_with("seconds ") {
-            let secs: u64 = line.trim_left_matches("seconds ").parse().unwrap();
-            ai.stop_condition = StopCondition::Time(::std::time::Duration::from_secs(secs));
+        } else if line.starts_with("millis ") {
+            let millis: u64 = line.trim_left_matches("millis ").parse().unwrap();
+            ai.stop_condition = StopCondition::Time(::std::time::Duration::new(millis / 1000, (millis % 1000) as u32*1_000_000));
             println!("ok");
         }
     }

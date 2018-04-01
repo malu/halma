@@ -42,8 +42,8 @@ impl Engine {
         self.expect_ok_response(format!("move {}", serde_json::to_string(&mov).unwrap()));
     }
 
-    fn seconds(&mut self, secs: u64) {
-        self.expect_ok_response(format!("seconds {}", secs));
+    fn millis(&mut self, millis: u64) {
+        self.expect_ok_response(format!("millis {}", millis));
     }
 
     fn quit(&mut self) {
@@ -147,8 +147,8 @@ fn run_single(ai0: &mut Engine, ai1: &mut Engine, max_plies: usize) -> Outcome {
     let mut game = Game::default();
     ai0.setup(game.state());
     ai1.setup(game.state());
-    ai0.seconds(1);
-    ai1.seconds(1);
+    ai0.millis(500);
+    ai1.millis(500);
 
     let mut plies = 0;
     loop {
