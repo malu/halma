@@ -85,7 +85,7 @@ fn run(engines: Vec<EngineDefinition>, rounds: usize) {
                 let mut ai0 = engine0.spawn();
                 let mut ai1 = engine1.spawn();
 
-                results[round][i].push(run_single(&mut ai0, &mut ai1, 1000));
+                results[round][i].push(run_single(&mut ai0, &mut ai1, 300));
                 ai0.quit();
                 ai1.quit();
             }
@@ -93,11 +93,10 @@ fn run(engines: Vec<EngineDefinition>, rounds: usize) {
 
         if round + 1 == rounds {
             println!("");
-            println!("Tournament over.");
-            println!("Final standings:");
+            println!("Tournament over. Final Standings:");
         } else {
-            println!("Round {} over.", round+1);
-            println!("Current standings:");
+            println!("");
+            println!("Round {} over. Current standings:", round+1);
         }
 
         let mut standings = engines.iter().enumerate().map(|(i, engine)| {
@@ -152,28 +151,28 @@ fn run_single(ai0: &mut Engine, ai1: &mut Engine, max_plies: usize) -> Outcome {
 
     let mut plies = 0;
     loop {
-        if game.state().won(1) {
-            return Outcome::Loss;
-        }
-
         let mov = ai0.getmove();
         game.move_piece(mov);
         ai0.make_move(mov);
         ai1.make_move(mov);
+
+        if game.state().won(0) {
+            return Outcome::Win;
+        }
 
         plies += 1;
         if plies > max_plies {
             return Outcome::Draw;
         }
 
-        if game.state().won(0) {
-            return Outcome::Win;
-        }
-
         let mov = ai1.getmove();
         game.move_piece(mov);
         ai0.make_move(mov);
         ai1.make_move(mov);
+
+        if game.state().won(1) {
+            return Outcome::Loss;
+        }
 
         plies += 1;
         if plies > max_plies {
@@ -196,7 +195,7 @@ fn main() {
 
     let ais = names.iter().zip(paths).map(|(name, path)| EngineDefinition::new(name, &path)).collect();
 
-    run(ais, 8);
+    run(ais, 12);
 }
 
 /*
