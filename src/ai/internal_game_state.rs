@@ -22,7 +22,7 @@ impl InternalGameState {
     }
 
     pub fn won(&self, player: u8) -> bool {
-        self.pieces[player as usize] == BB_TARGET[player as usize]
+        (self.pieces[0] | self.pieces[1]) & BB_TARGET[player as usize] == BB_TARGET[player as usize] && !(self.pieces[player as usize] & BB_TARGET[player as usize]).is_empty()
     }
 
     fn reachable_from(&self, from: BitIndex) -> Bitboard {

@@ -92,13 +92,18 @@ impl GameState {
     }
 
     pub fn won(&self, player: u8) -> bool {
+        let mut one_stone = false;
         for &(x, y) in GameState::targets(player) {
-            if self.get(x, y) != Tile::Player(player) {
+            if self.get(x, y) == Tile::Empty {
                 return false;
+            }
+
+            if self.get(x, y) == Tile::Player(player) {
+                one_stone = true;
             }
         }
 
-        return true;
+        one_stone
     }
 
     pub fn moves_from(&self, x: i8, y: i8) -> Vec<Move> {
