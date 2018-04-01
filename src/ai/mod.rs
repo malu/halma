@@ -109,7 +109,7 @@ impl AI {
             if let StopCondition::Time(dur) = self.stop_condition {
                 let time_taken = ::std::time::Instant::now() - self.start;
                 let remaining = dur.checked_sub(time_taken);
-                if remaining == None || remaining.unwrap() < ::std::time::Duration::new(0, ply as u32*4*1024*1024) {
+                if remaining == None || remaining.unwrap() < ::std::time::Duration::new(0, ply as u32*4*1000*1000) {
                     self.stop_condition_triggered = true;
                     return true;
                 }
