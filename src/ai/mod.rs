@@ -31,7 +31,8 @@ pub struct AI {
     pub stop_condition: StopCondition,
     stop_condition_triggered: bool,
     start: ::std::time::Instant,
-    transpositions: TranspositionTable,
+    main_tt: TranspositionTable,
+    always_replace_tt: TranspositionTable,
     evaluation: Evaluation,
     visited_nodes: usize,
     visited_leaf_nodes: usize,
@@ -55,7 +56,8 @@ impl AI {
             stop_condition_triggered: false,
             start: ::std::time::Instant::now(),
             evaluation: Evaluation::from(&state),
-            transpositions: TranspositionTable::new(20),
+            main_tt: TranspositionTable::new(20),
+            always_replace_tt: TranspositionTable::new(10),
             visited_nodes: 0,
             visited_leaf_nodes: 0,
             cutoffs: 0,
@@ -322,13 +324,15 @@ impl AI {
             ply: self.state.ply,
         };
 
-        match self.transpositions.get(self.hash, self.state) {
+        self.always_replace_tt.insert(self.hash, self.state, transposition);
+
+        match self.main_tt.get(self.hash, self.state) {
             None => {
-                self.transpositions.insert(self.hash, self.state, transposition);
+                self.main_tt.insert(self.hash, self.state, transposition);
             }
             Some(old) => {
                 if old.should_be_replaced_by(&transposition, pv) {
-                    self.transpositions.insert(self.hash, self.state, transposition);
+                    self.main_tt.insert(self.hash, self.state, transposition);
                 }
             }
         }
@@ -336,7 +340,13 @@ impl AI {
 
     fn get_transposition(&mut self, alpha: Score, beta: Score, depth: isize) -> Option<(Option<(Score, bool)>, InternalMove)> {
         self.tt_lookups += 1;
-        if let Some(transposition) = self.transpositions.get(self.hash, self.state) {
+        let mut tt_entry = self.always_replace_tt.get(self.hash, self.state);
+
+        if tt_entry == None {
+            tt_entry = self.main_tt.get(self.hash, self.state);
+        }
+
+        if let Some(transposition) = tt_entry {
             let mov = transposition.best_move;
 
             // If the depth used to evaluate the position now is higher than the one we used
