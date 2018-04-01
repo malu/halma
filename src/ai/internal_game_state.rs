@@ -26,7 +26,6 @@ impl InternalGameState {
     }
 
     fn reachable_from(&self, from: BitIndex) -> Bitboard {
-        let mut result;
         let mut jumping_targets = Bitboard::default();
         let mut next_jumping_targets = Bitboard::bit(from);
 
@@ -42,7 +41,7 @@ impl InternalGameState {
                 ( 13,  26), // south west
                 ( 14,  28), // south east
             ] {
-                next_jumping_targets |= (occupied << skip) & empty & (jumping_targets << jump);
+                next_jumping_targets |= (occupied << skip) & (jumping_targets << jump);
             }
 
             // shift right
@@ -51,11 +50,11 @@ impl InternalGameState {
                 (13, 26), // north east
                 (14, 28), // north west
             ] {
-                next_jumping_targets |= (occupied >> skip) & empty & (jumping_targets >> jump);
+                next_jumping_targets |= (occupied >> skip) & (jumping_targets >> jump);
             }
-        }
 
-        result = jumping_targets;
+            next_jumping_targets &= empty;
+        }
 
         for &slide in &[
             255,
@@ -66,15 +65,10 @@ impl InternalGameState {
             242,
         ] {
             let to = from.wrapping_add(slide);
-            if empty.get_bit(to) {
-                result.set_bit(to);
-            }
+            jumping_targets.set_bit(to);
         }
 
-        result.unset_bit(from);
-
-        assert!(!result.get_bit(from));
-        result
+        jumping_targets & empty
     }
 
     pub fn possible_moves(&self) -> Vec<InternalMove> {
