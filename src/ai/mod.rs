@@ -123,7 +123,7 @@ impl AI {
 
     fn search_pv(&mut self, ply: isize, alpha: Score, beta: Score, depth: isize) -> Score {
         if self.should_stop(ply) {
-            return self.evaluation.evaluate(self.state.current_player);
+            return self.evaluation.evaluate(self.state);
         }
 
         self.visited_nodes += 1;
@@ -136,7 +136,7 @@ impl AI {
         // 2. Check if we ran out of depth and have to evaluate the position staticly.
         if depth < ONE_PLY {
             self.visited_leaf_nodes += 1;
-            return self.evaluation.evaluate(self.state.current_player);
+            return self.evaluation.evaluate(self.state);
         }
 
         // A list of known good moves. These will be evaluated first to get early curoffs of alpha
@@ -236,7 +236,7 @@ impl AI {
 
     fn search_null(&mut self, ply: isize, beta: Score, depth: isize) -> Score {
         if self.should_stop(ply) {
-            return self.evaluation.evaluate(self.state.current_player);
+            return self.evaluation.evaluate(self.state);
         }
 
         self.visited_nodes += 1;
@@ -249,7 +249,7 @@ impl AI {
         // 2. Check if we ran out of depth and have to evaluate the position staticly.
         if depth < ONE_PLY {
             self.visited_leaf_nodes += 1;
-            return self.evaluation.evaluate(self.state.current_player);
+            return self.evaluation.evaluate(self.state);
         }
 
         let alpha = beta-1;

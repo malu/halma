@@ -125,6 +125,10 @@ impl Bitboard {
             i: 0,
         }
     }
+
+    pub fn popcount(&self) -> usize {
+        (self.0[0].count_ones() + self.0[1].count_ones() + self.0[2].count_ones() + self.0[3].count_ones()) as usize
+    }
 }
 
 pub struct OnesIterator {

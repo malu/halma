@@ -3,7 +3,7 @@ use ai::bitboard::{BB_INVALID, BB_TARGET, Bitboard, BitIndex, pos_to_index, inde
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub struct InternalGameState {
-    pieces: [Bitboard; 2],
+    pub pieces: [Bitboard; 2],
     pub ply: usize,
     pub current_player: u8,
 }
@@ -25,7 +25,7 @@ impl InternalGameState {
         (self.pieces[0] | self.pieces[1]) & BB_TARGET[player as usize] == BB_TARGET[player as usize] && !(self.pieces[player as usize] & BB_TARGET[player as usize]).is_empty()
     }
 
-    fn reachable_from(&self, from: BitIndex) -> Bitboard {
+    pub fn reachable_from(&self, from: BitIndex) -> Bitboard {
         let mut jumping_targets = Bitboard::default();
         let mut next_jumping_targets = Bitboard::bit(from);
 

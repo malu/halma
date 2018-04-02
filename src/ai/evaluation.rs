@@ -1,15 +1,16 @@
 //! The Evaluation
 //!
-//! The current game state is evaluated using four aspects:
+//! The current game state is evaluated using five aspects:
 //!   * The distance of the least advanced piece of each player to its destination side of the
 //!     board.
 //!   * The total distance of the remaining pieces to the destination side of the board.
 //!   * How well the kinds of pieces match up with the kinds of the destination positions.
 //!   * How centralized the pieces of each player are.
+//!   * The mobility of the individual pieces.
 
 use ::{BOARD_HEIGHT, BOARD_WIDTH, GameState, Tile};
 use ai::Score;
-use ai::internal_game_state::InternalMove;
+use ai::internal_game_state::{InternalGameState, InternalMove};
 use ai::bitboard::index_to_pos;
 
 /// Caches properties of and evaluates the current game state.
@@ -92,15 +93,17 @@ impl Evaluation {
         self.make_move(player, mov.inverse());
     }
 
-    /// Calculates an evaluation score using the cached data.
-    pub fn evaluate(&mut self, player: u8) -> Score {
+    /// Calculates an evaluation score using the cached data and computes some not easily cacheable
+    /// score.
+    pub fn evaluate(&mut self, state: InternalGameState) -> Score {
         let mut score = 0;
         score += 100_000 * self.score_dist_last_piece() / 17;
         score += 100_000 * self.score_total_distance() / 209;
         score += 100_000 * self.score_centralization() / 100;
         score += 100_000 * self.score_kinds() / 120;
+        score += self.score_mobility(state) * 2;
 
-        if player == 0 {
+        if state.current_player == 0 {
             score
         } else {
             -score
@@ -129,6 +132,12 @@ impl Evaluation {
         let p0 = self.dist_to_center[0].iter().enumerate().map(|(dist, &count)| ::std::cmp::max(0, dist as Score-1) as Score*count as Score).sum::<Score>();
         let p1 = self.dist_to_center[1].iter().enumerate().map(|(dist, &count)| ::std::cmp::max(0, dist as Score-1) as Score*count as Score).sum::<Score>();
         p1 - p0
+    }
+
+    fn score_mobility(&self, state: InternalGameState) -> Score {
+        let p0: Score = state.pieces[0].ones().map(|i| state.reachable_from(i).popcount() as Score).sum();
+        let p1: Score = state.pieces[1].ones().map(|i| state.reachable_from(i).popcount() as Score).sum();
+        p0 - p1
     }
 }
 
