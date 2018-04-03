@@ -13,6 +13,17 @@ use ai::Score;
 use ai::internal_game_state::{InternalGameState, InternalMove};
 use ai::bitboard::index_to_pos;
 
+/// Approximate distance between row and end of target area.
+///
+/// In general, this `DIST_SCORE[player][row]` is twice distance between a piece of player `player`
+/// on row `row` and the end of this player's target area. To encourage a placement of the pieces on
+/// the second and fourth row of the target area (allowing better filling of the area), these rows
+/// have their distance discounted.
+const DIST_SCORE: [[Score; BOARD_HEIGHT as usize]; 2] = [
+    [32, 30, 28, 26, 24, 22, 20, 18, 16, 14, 12, 10,  8,  1,  4,  2,  0],
+    [ 0,  2,  4,  1,  8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32],
+];
+
 /// Caches properties of and evaluates the current game state.
 ///
 /// Notice that because it does only recompute what changed (except at construction time via
@@ -46,13 +57,13 @@ impl<'a> From<&'a GameState> for Evaluation {
                     Tile::Player(0) => {
                         kinds[0][kind(x, y)] += 1;
                         ys[0][y as usize] += 1;
-                        dist[0] += BOARD_HEIGHT as isize - 1 - y as isize;
+                        dist[0] += DIST_SCORE[0][y as usize];
                         dist_to_center[0][distance_to_center(x, y) as usize] += 1;
                     }
                     Tile::Player(1) => {
                         kinds[1][kind(x, y)] += 1;
                         ys[1][y as usize] += 1;
-                        dist[1] += y as isize;
+                        dist[1] += DIST_SCORE[1][y as usize];
                         dist_to_center[1][distance_to_center(x, y) as usize] += 1;
                     }
                     _ => {}
@@ -79,11 +90,8 @@ impl Evaluation {
         self.kinds[player as usize][kind(tx, ty)] += 1;
         self.ys[player as usize][fy as usize] -= 1;
         self.ys[player as usize][ty as usize] += 1;
-        if player == 0 {
-            self.dist[player as usize] += (fy - ty) as isize;
-        } else {
-            self.dist[player as usize] += (ty - fy) as isize;
-        }
+
+        self.dist[player as usize] += DIST_SCORE[player as usize][ty as usize] - DIST_SCORE[player as usize][fy as usize];
         self.dist_to_center[player as usize][distance_to_center(fx, fy) as usize] -= 1;
         self.dist_to_center[player as usize][distance_to_center(tx, ty) as usize] += 1;
     }
@@ -97,7 +105,7 @@ impl Evaluation {
     /// score.
     pub fn evaluate(&mut self, state: InternalGameState) -> Score {
         let mut score = 0;
-        score += 100_000 * self.score_dist_last_piece() / 17;
+        score += 100_000 * self.score_dist_last_piece() / 34;
         score += 100_000 * self.score_total_distance() / 209;
         score += 100_000 * self.score_centralization() / 100;
         score += 100_000 * self.score_kinds() / 120;
