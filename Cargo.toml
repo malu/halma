@@ -2,6 +2,7 @@
 name = "halma"
 version = "0.1.0"
 authors = ["Maximilian Lupke <maxlupke@gmail.com>"]
+license = "MIT"
 
 [dependencies]
 sdl2 = { version = "0.31", features = ["gfx"] }
