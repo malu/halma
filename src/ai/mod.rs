@@ -41,7 +41,6 @@ pub struct AI {
     tt_hits: usize,
     pv_nullsearches: usize,
     pv_failed_nullsearches: usize,
-    moves_explored: [usize; 8],
 
     hasher: IncrementalHasher,
     hash: IncrementalHash
@@ -65,7 +64,6 @@ impl AI {
             tt_hits: 0,
             pv_nullsearches: 0,
             pv_failed_nullsearches: 0,
-            moves_explored: [0; 8],
 
             hasher: Default::default(),
             hash: 0,
@@ -171,8 +169,6 @@ impl AI {
             }
         };
 
-        // Tracks the number of moves tried in this position.
-        let mut moves_explored = 0;
 
         // Whether we found any move which increases alpha and did not exceed beta. After a move
         // increased alpha, we search all remaining moves using a null-window first and only do a
@@ -208,12 +204,10 @@ impl AI {
                 }
             }
             self.internal_unmake_move(mov);
-            moves_explored += 1;
 
             if score >= beta {
                 self.cutoffs += 1;
                 self.insert_transposition(ScoreType::LowerBound(beta), Some(mov), depth, true);
-                self.moves_explored[::std::cmp::min(7, moves_explored)] += 1;
                 return beta;
             }
 
@@ -230,7 +224,6 @@ impl AI {
             self.insert_transposition(ScoreType::UpperBound(alpha), best_move, depth, true);
         }
 
-        self.moves_explored[::std::cmp::min(7, moves_explored)] += 1;
         alpha
     }
 
@@ -383,7 +376,6 @@ impl AI {
         self.tt_hits = 0;
         self.pv_nullsearches = 0;
         self.pv_failed_nullsearches = 0;
-        self.moves_explored = [0; 8];
 
         self.stop_condition_triggered = false;
         //println!("Search depth:  {}", depth);
@@ -435,15 +427,6 @@ impl AI {
             println!("        | hits    {} ({:.2}%)", self.tt_hits, 100.0 * self.tt_hits as f64 / self.tt_lookups as f64);
             println!("     PV | 0-wind. {}", self.pv_nullsearches);
             println!("        | failed  {} ({:.2}%)", self.pv_failed_nullsearches, 100.0 * self.pv_failed_nullsearches  as f64 / self.pv_nullsearches as f64);
-            let total_moves_explored = self.moves_explored.iter().sum::<usize>() as f64;
-            println!("  expl. | 0:  {} ({:.3}%)", self.moves_explored[0], 100.0 * self.moves_explored[0] as f64 / total_moves_explored);
-            println!("        | 1:  {} ({:.3}%)", self.moves_explored[1], 100.0 * self.moves_explored[1] as f64 / total_moves_explored);
-            println!("        | 2:  {} ({:.3}%)", self.moves_explored[2], 100.0 * self.moves_explored[2] as f64 / total_moves_explored);
-            println!("        | 3:  {} ({:.3}%)", self.moves_explored[3], 100.0 * self.moves_explored[3] as f64 / total_moves_explored);
-            println!("        | 4:  {} ({:.3}%)", self.moves_explored[4], 100.0 * self.moves_explored[4] as f64 / total_moves_explored);
-            println!("        | 5:  {} ({:.3}%)", self.moves_explored[5], 100.0 * self.moves_explored[5] as f64 / total_moves_explored);
-            println!("        | 6:  {} ({:.3}%)", self.moves_explored[6], 100.0 * self.moves_explored[6] as f64 / total_moves_explored);
-            println!("        | 7+: {} ({:.3}%)", self.moves_explored[7], 100.0 * self.moves_explored[7] as f64 / total_moves_explored);
             println!("");
             println!("Time:  {}:{}", elapsed.as_secs() / 60, (elapsed.as_secs() % 60) as f64 + elapsed.subsec_nanos() as f64 / 1_000_000_000.0);
             println!("Score: {}", score);
