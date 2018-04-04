@@ -1,16 +1,18 @@
 use {GameState, Move};
-
 mod bitboard;
 pub mod evaluation;
 mod incremental_hasher;
 mod internal_game_state;
-mod move_list_iterator;
+mod move_picker;
 mod tt;
+
+use std::cell::RefCell;
+use std::rc::Rc;
 
 use self::evaluation::Evaluation;
 use self::incremental_hasher::*;
 use self::internal_game_state::*;
-use self::move_list_iterator::*;
+use self::move_picker::*;
 use self::tt::*;
 
 #[derive(Copy, Clone, PartialEq, Eq)]
@@ -31,8 +33,8 @@ pub struct AI {
     pub stop_condition: StopCondition,
     stop_condition_triggered: bool,
     start: ::std::time::Instant,
-    main_tt: TranspositionTable,
-    always_replace_tt: TranspositionTable,
+    main_tt: Rc<RefCell<TranspositionTable>>,
+    always_replace_tt: Rc<RefCell<TranspositionTable>>,
     evaluation: Evaluation,
     visited_nodes: usize,
     visited_leaf_nodes: usize,
@@ -55,8 +57,8 @@ impl AI {
             stop_condition_triggered: false,
             start: ::std::time::Instant::now(),
             evaluation: Evaluation::from(&state),
-            main_tt: TranspositionTable::new(20),
-            always_replace_tt: TranspositionTable::new(10),
+            main_tt: Rc::new(RefCell::new(TranspositionTable::new(20))),
+            always_replace_tt: Rc::new(RefCell::new(TranspositionTable::new(10))),
             visited_nodes: 0,
             visited_leaf_nodes: 0,
             cutoffs: 0,
@@ -137,38 +139,19 @@ impl AI {
             return self.evaluation.evaluate(self.state);
         }
 
-        // A list of known good moves. These will be evaluated first to get early curoffs of alpha
-        // increases.
-        let mut known_good_moves = Vec::new();
-
         // 3. Lookup current position in transposition table. If we encountered this position
-        //    before, previous evaluations or best moves are useful to get an early beta cutoff.
-        if let Some((tt_score, tt_mov)) = self.get_transposition(alpha, beta, depth) {
+        //    before, previous evaluations are useful to get an early cutoff.
+        if let Some((score, exact)) = self.get_transposition_score(alpha, beta, depth) {
             self.tt_hits += 1;
 
-            // tt_score is not None if the position in the transposition table was evaluated to a
-            // higher depth. If in that case the score is also exact, we return with this score.
-            // Otherwise we add it to our list of known good moves.
-            if let Some((score, exact)) = tt_score {
-                if exact {
-                    self.cutoffs += 1;
-                    return score;
-                }
+            // get_transposition_score returns Some(_) if the position in the transposition
+            // table was evaluated to a higher depth. If in that case the score is also exact,
+            // we return with this score.
+            if exact {
+                self.cutoffs += 1;
+                return score;
             }
-
-            known_good_moves.push(tt_mov);
         }
-
-        // We score the moves (for ordering purposes) by how far they advance along the board.
-        let current_player = self.state.current_player;
-        let score_move_order = |mov: InternalMove| -> isize {
-            if current_player == 0 {
-                mov.to as isize - mov.from as isize
-            } else {
-                mov.from as isize - mov.to as isize
-            }
-        };
-
 
         // Whether we found any move which increases alpha and did not exceed beta. After a move
         // increased alpha, we search all remaining moves using a null-window first and only do a
@@ -179,7 +162,7 @@ impl AI {
         // The best response we found.
         let mut best_move = None;
 
-        let moves = known_good_moves.into_iter().chain(self.state.possible_moves().order(8, score_move_order));
+        let moves = MovePicker::new(self.state, self.hash, self.main_tt.clone(), self.always_replace_tt.clone());
         // 4. Evaluate remaining moves. We first try the 8 highest rated moves (with respect to the
         //    move ordering score above). If we did not get a beta cutoff during these 8 moves, we
         //    try the remaining moves in any order because the move ordering seems bad and we give
@@ -247,45 +230,28 @@ impl AI {
 
         let alpha = beta-1;
 
-        // A list of known good moves. These will be evaluated first to get early curoffs of alpha
-        // increases.
-        let mut known_good_moves = Vec::new();
-
         // 3. Lookup current position in transposition table. If we encountered this position
         //    before, previous evaluations or best moves are useful to get an early beta cutoff.
-        if let Some((tt_score, tt_mov)) = self.get_transposition(alpha, beta, depth) {
+        if let Some((score, exact)) = self.get_transposition_score(alpha, beta, depth) {
             self.tt_hits += 1;
 
-            // tt_score is not None if the position in the transposition table was evaluated to a
-            // higher depth. In that case we will not reevaluate but use the score as is. Otherwise
-            // evaluate this move as any other move.
-            if let Some((score, exact)) = tt_score {
-                if exact {
-                    self.cutoffs += 1;
-                    return score;
-                }
+            // get_transposition_score returns Some(_) if the position in the transposition table
+            // was evaluated to a higher depth. In that case we may be able to get a cutoff.
+            if exact {
+                self.cutoffs += 1;
+                return score;
+            }
 
-                if score >= beta {
-                    self.cutoffs += 1;
-                    return beta;
-                }
-            } else {
-                known_good_moves.push(tt_mov);
+            if score >= beta {
+                self.cutoffs += 1;
+                return beta;
             }
 
         }
 
         // We score the moves (for ordering purposes) by how far they advance along the board.
-        let current_player = self.state.current_player;
-        let score_move_order = |mov: InternalMove| -> isize {
-            if current_player == 0 {
-                mov.to as isize - mov.from as isize
-            } else {
-                mov.from as isize - mov.to as isize
-            }
-        };
 
-        let moves = known_good_moves.into_iter().chain(self.state.possible_moves().order(8, score_move_order));
+        let moves = MovePicker::new(self.state, self.hash, self.main_tt.clone(), self.always_replace_tt.clone());
         // 4. Evaluate remaining moves. We first try the 8 highest rated moves (with respect to the
         //    move ordering score above). If we did not get a beta cutoff during these 8 moves, we
         //    try the remaining moves in any order because the move ordering seems bad and we give
@@ -317,48 +283,46 @@ impl AI {
             ply: self.state.ply,
         };
 
-        self.always_replace_tt.insert(self.hash, self.state, transposition);
+        self.always_replace_tt.borrow_mut().insert(self.hash, self.state, transposition);
 
-        match self.main_tt.get(self.hash, self.state) {
+        let main_tt_entry = { self.main_tt.borrow().get(self.hash, self.state) };
+        match main_tt_entry {
             None => {
-                self.main_tt.insert(self.hash, self.state, transposition);
+                self.main_tt.borrow_mut().insert(self.hash, self.state, transposition);
             }
             Some(old) => {
                 if old.should_be_replaced_by(&transposition, pv) {
-                    self.main_tt.insert(self.hash, self.state, transposition);
+                    self.main_tt.borrow_mut().insert(self.hash, self.state, transposition);
                 }
             }
         }
     }
 
-    fn get_transposition(&mut self, alpha: Score, beta: Score, depth: isize) -> Option<(Option<(Score, bool)>, InternalMove)> {
+    fn get_transposition_score(&mut self, alpha: Score, beta: Score, depth: isize) -> Option<(Score, bool)> {
         self.tt_lookups += 1;
-        let mut tt_entry = self.always_replace_tt.get(self.hash, self.state);
+        let mut tt_entry = { self.always_replace_tt.borrow().get(self.hash, self.state) };
 
         if tt_entry == None {
-            tt_entry = self.main_tt.get(self.hash, self.state);
+            tt_entry = self.main_tt.borrow().get(self.hash, self.state);
         }
 
         if let Some(transposition) = tt_entry {
-            let mov = transposition.best_move;
-
             // If the depth used to evaluate the position now is higher than the one we used
-            // before, do not use the transposition table and reevaluate. Only take the best_move
-            // from before as move to evaluate first.
+            // before, this score is of no use to us.
             if transposition.depth < depth {
-                return Some((None, mov));
+                return None;
             }
 
             match transposition.evaluation {
-                ScoreType::Exact(score) => return Some((Some((score, true)), mov)),
+                ScoreType::Exact(score) => return Some((score, true)),
                 ScoreType::LowerBound(lower_bound) => {
                     if lower_bound >= beta {
-                        return Some((Some((beta, false)), mov));
+                        return Some((beta, false));
                     }
                 }
                 ScoreType::UpperBound(upper_bound) => {
                     if upper_bound <= alpha {
-                        return Some((Some((alpha, false)), mov));
+                        return Some((alpha, false));
                     }
                 }
             }
@@ -408,8 +372,8 @@ impl AI {
         }
 
         let mov;
-        if let Some((_, pvmove)) = self.get_transposition(alpha, beta, 1) {
-            mov = pvmove;
+        if let Some(transposition) = self.always_replace_tt.borrow().get(self.hash, self.state) {
+            mov = transposition.best_move;
         } else {
             panic!("No PV entry in transposition table");
         }
