@@ -10,26 +10,23 @@ pub struct MovePicker {
     state: InternalGameState,
     hash: IncrementalHash,
     main_tt: Rc<RefCell<TranspositionTable>>,
-    always_replace_tt: Rc<RefCell<TranspositionTable>>,
 
     stage: MovePickerStage,
 }
 
 enum MovePickerStage {
-    MainTT,
-    AlwaysReplaceTT,
+    TTMove,
     Generate,
     All(usize, Vec<InternalMove>),
 }
 
 impl MovePicker {
-    pub fn new(state: InternalGameState, hash: IncrementalHash, main_tt: Rc<RefCell<TranspositionTable>>, always_replace_tt: Rc<RefCell<TranspositionTable>>) -> Self {
+    pub fn new(state: InternalGameState, hash: IncrementalHash, main_tt: Rc<RefCell<TranspositionTable>>) -> Self {
         MovePicker {
             state,
             hash,
             main_tt,
-            always_replace_tt,
-            stage: MovePickerStage::MainTT,
+            stage: MovePickerStage::TTMove,
         }
     }
 }
@@ -39,20 +36,18 @@ impl Iterator for MovePicker {
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.stage {
-            MovePickerStage::MainTT => {
-                self.stage = MovePickerStage::AlwaysReplaceTT;
-                let tt_entry = self.main_tt.borrow().get(self.hash, self.state);
-                if let Some(transposition) = tt_entry {
-                    return Some(transposition.best_move);
-                }
-                self.next()
-            }
-
-            MovePickerStage::AlwaysReplaceTT => {
+            MovePickerStage::TTMove => {
                 self.stage = MovePickerStage::Generate;
-                let tt_entry = self.always_replace_tt.borrow().get(self.hash, self.state);
+                let tt_entry = self.main_tt.borrow().get(self.hash);
                 if let Some(transposition) = tt_entry {
-                    return Some(transposition.best_move);
+                    // Since we can get an illegal move from the transposition table (because it
+                    // belongs to another position which hashed to the same index), we have to
+                    // check its legallity before returning it.
+                    let mov = transposition.best_move;
+                    if self.state.pieces[self.state.current_player as usize].get_bit(mov.from) &&
+                        self.state.reachable_from(mov.from).get_bit(mov.to) {
+                        return Some(mov);
+                    }
                 }
                 self.next()
             }

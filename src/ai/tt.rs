@@ -1,5 +1,5 @@
 use ai::{IncrementalHash, Score};
-use ai::internal_game_state::{InternalGameState, InternalMove};
+use ai::internal_game_state::InternalMove;
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum ScoreType {
@@ -35,7 +35,7 @@ impl Transposition {
 }
 
 pub struct TranspositionTable {
-    table: Vec<Option<(InternalGameState, Transposition)>>,
+    table: Vec<Option<Transposition>>,
     bitmask: usize,
 }
 
@@ -54,20 +54,12 @@ impl TranspositionTable {
         }
     }
 
-    pub fn get(&self, hash: IncrementalHash, state: InternalGameState) -> Option<Transposition> {
-        if let Some((tstate, t)) = self.table[hash & self.bitmask] {
-            if tstate != state {
-                return None;
-            } else {
-                return Some(t);
-            }
-        }
-        
-        None
+    pub fn get(&self, hash: IncrementalHash) -> Option<Transposition> {
+        self.table[hash & self.bitmask]
     }
 
-    pub fn insert(&mut self, hash: IncrementalHash, state: InternalGameState, transposition: Transposition) {
-        self.table[hash & self.bitmask] = Some((state, transposition));
+    pub fn insert(&mut self, hash: IncrementalHash, transposition: Transposition) {
+        self.table[hash & self.bitmask] = Some(transposition);
     }
 }
 

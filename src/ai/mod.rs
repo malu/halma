@@ -34,7 +34,6 @@ pub struct AI {
     stop_condition_triggered: bool,
     start: ::std::time::Instant,
     main_tt: Rc<RefCell<TranspositionTable>>,
-    always_replace_tt: Rc<RefCell<TranspositionTable>>,
     evaluation: Evaluation,
     visited_nodes: usize,
     visited_leaf_nodes: usize,
@@ -58,7 +57,6 @@ impl AI {
             start: ::std::time::Instant::now(),
             evaluation: Evaluation::from(&state),
             main_tt: Rc::new(RefCell::new(TranspositionTable::new(20))),
-            always_replace_tt: Rc::new(RefCell::new(TranspositionTable::new(10))),
             visited_nodes: 0,
             visited_leaf_nodes: 0,
             cutoffs: 0,
@@ -162,7 +160,7 @@ impl AI {
         // The best response we found.
         let mut best_move = None;
 
-        let moves = MovePicker::new(self.state, self.hash, self.main_tt.clone(), self.always_replace_tt.clone());
+        let moves = MovePicker::new(self.state, self.hash, self.main_tt.clone());
         // 4. Evaluate remaining moves. We first try the 8 highest rated moves (with respect to the
         //    move ordering score above). If we did not get a beta cutoff during these 8 moves, we
         //    try the remaining moves in any order because the move ordering seems bad and we give
@@ -251,7 +249,7 @@ impl AI {
 
         // We score the moves (for ordering purposes) by how far they advance along the board.
 
-        let moves = MovePicker::new(self.state, self.hash, self.main_tt.clone(), self.always_replace_tt.clone());
+        let moves = MovePicker::new(self.state, self.hash, self.main_tt.clone());
         // 4. Evaluate remaining moves. We first try the 8 highest rated moves (with respect to the
         //    move ordering score above). If we did not get a beta cutoff during these 8 moves, we
         //    try the remaining moves in any order because the move ordering seems bad and we give
@@ -283,16 +281,14 @@ impl AI {
             ply: self.state.ply,
         };
 
-        self.always_replace_tt.borrow_mut().insert(self.hash, self.state, transposition);
-
-        let main_tt_entry = { self.main_tt.borrow().get(self.hash, self.state) };
+        let main_tt_entry = { self.main_tt.borrow().get(self.hash) };
         match main_tt_entry {
             None => {
-                self.main_tt.borrow_mut().insert(self.hash, self.state, transposition);
+                self.main_tt.borrow_mut().insert(self.hash, transposition);
             }
             Some(old) => {
                 if old.should_be_replaced_by(&transposition, pv) {
-                    self.main_tt.borrow_mut().insert(self.hash, self.state, transposition);
+                    self.main_tt.borrow_mut().insert(self.hash, transposition);
                 }
             }
         }
@@ -300,11 +296,7 @@ impl AI {
 
     fn get_transposition_score(&mut self, alpha: Score, beta: Score, depth: isize) -> Option<(Score, bool)> {
         self.tt_lookups += 1;
-        let mut tt_entry = { self.always_replace_tt.borrow().get(self.hash, self.state) };
-
-        if tt_entry == None {
-            tt_entry = self.main_tt.borrow().get(self.hash, self.state);
-        }
+        let tt_entry = self.main_tt.borrow().get(self.hash);
 
         if let Some(transposition) = tt_entry {
             // If the depth used to evaluate the position now is higher than the one we used
@@ -372,7 +364,7 @@ impl AI {
         }
 
         let mov;
-        if let Some(transposition) = self.always_replace_tt.borrow().get(self.hash, self.state) {
+        if let Some(transposition) = self.main_tt.borrow().get(self.hash) {
             mov = transposition.best_move;
         } else {
             panic!("No PV entry in transposition table");
