@@ -2,6 +2,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use ai::Score;
+use ai::bitboard::{Bitboard, BitIndex};
 use ai::incremental_hasher::IncrementalHash;
 use ai::internal_game_state::{InternalGameState, InternalMove};
 use ai::tt::TranspositionTable;
@@ -16,8 +17,8 @@ pub struct MovePicker {
 
 enum MovePickerStage {
     TTMove,
-    Generate,
-    All(usize, Vec<InternalMove>),
+    Generate { already_generated: Option<BitIndex>, reachable: Bitboard },
+    All { index: usize, moves: Vec<InternalMove> },
 }
 
 impl MovePicker {
@@ -37,28 +38,49 @@ impl Iterator for MovePicker {
     fn next(&mut self) -> Option<Self::Item> {
         match self.stage {
             MovePickerStage::TTMove => {
-                self.stage = MovePickerStage::Generate;
                 let tt_entry = self.main_tt.borrow().get(self.hash);
                 if let Some(transposition) = tt_entry {
                     // Since we can get an illegal move from the transposition table (because it
                     // belongs to another position which hashed to the same index), we have to
                     // check its legallity before returning it.
                     let mov = transposition.best_move;
-                    if self.state.pieces[self.state.current_player as usize].get_bit(mov.from) &&
-                        self.state.reachable_from(mov.from).get_bit(mov.to) {
-                        return Some(mov);
+                    if self.state.pieces[self.state.current_player as usize].get_bit(mov.from) {
+                        let reachable = self.state.reachable_from(mov.from);
+
+                        // Because InternalGameState::reachable_from is computationally expensive,
+                        // we cache it so we do not have to generate the reachability map for this
+                        // piece again.
+                        self.stage = MovePickerStage::Generate {
+                            already_generated: Some(mov.from),
+                            reachable,
+                        };
+                        if reachable.get_bit(mov.to) {
+                            return Some(mov);
+                        }
                     }
                 }
+                self.stage = MovePickerStage::Generate { already_generated: None, reachable: Bitboard::default() };
                 self.next()
             }
 
-            MovePickerStage::Generate => {
-                let moves = self.state.possible_moves();
-                self.stage = MovePickerStage::All(0, moves);
+            MovePickerStage::Generate { already_generated, reachable } => {
+                let mut remaining_pieces = self.state.pieces[self.state.current_player as usize];
+                let mut moves = Vec::with_capacity(256);
+                if let Some(from) = already_generated {
+                    remaining_pieces.unset_bit(from);
+                    moves.extend(reachable.ones().map(|to| InternalMove { from, to } ));
+                }
+
+                for from in remaining_pieces.ones() {
+                    let reachable = self.state.reachable_from(from);
+                    moves.extend(reachable.ones().map(|to| InternalMove { from, to }));
+                }
+
+                self.stage = MovePickerStage::All { index: 0, moves };
                 self.next()
             }
 
-            MovePickerStage::All(ref mut index, ref mut moves) => {
+            MovePickerStage::All { ref mut index, ref mut moves } => {
                 let num_moves = moves.len();
                 if *index == num_moves {
                     return None;
