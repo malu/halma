@@ -1,5 +1,5 @@
-use ai::{IncrementalHash, Score};
-use ai::internal_game_state::InternalMove;
+use ai::{Depth, IncrementalHash, Score};
+use ai::internal_game_state::{InternalMove, Ply};
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum ScoreType {
@@ -12,8 +12,8 @@ pub enum ScoreType {
 pub struct Transposition {
     pub evaluation: ScoreType,
     pub best_move: InternalMove,
-    pub depth: isize,
-    pub ply: usize,
+    pub depth: Depth,
+    pub ply: Ply,
 }
 
 impl Transposition {

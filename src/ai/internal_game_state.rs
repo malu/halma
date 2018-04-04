@@ -1,10 +1,12 @@
 use ::{BOARD_HEIGHT, BOARD_WIDTH, GameState, Move, Tile};
 use ai::bitboard::{BB_INVALID, BB_TARGET, Bitboard, BitIndex, pos_to_index, index_to_pos};
 
+pub type Ply = u32;
+
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub struct InternalGameState {
     pub pieces: [Bitboard; 2],
-    pub ply: usize,
+    pub ply: Ply,
     pub current_player: u8,
 }
 
@@ -145,7 +147,7 @@ impl From<GameState> for InternalGameState {
 
         InternalGameState {
             pieces,
-            ply: state.ply,
+            ply: state.ply as Ply,
             current_player: state.current_player,
         }
     }

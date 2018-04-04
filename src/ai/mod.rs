@@ -17,15 +17,15 @@ use self::tt::*;
 
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub enum StopCondition {
-    Depth(isize),
+    Depth(Depth),
     Time(::std::time::Duration),
 }
 
 type Score = isize;
-
 const WINNING_SCORE: Score = 1_000_000_000;
 
-const ONE_PLY: isize = 1000;
+type Depth = i32;
+const ONE_PLY: Depth = 1000;
 
 pub struct AI {
     pub state: InternalGameState,
@@ -96,7 +96,7 @@ impl AI {
         self.evaluation.unmake_move(self.state.current_player, mov);
     }
 
-    fn should_stop(&mut self, ply: isize) -> bool {
+    fn should_stop(&mut self, ply: Ply) -> bool {
         if ply == 0 {
             return false;
         }
@@ -109,7 +109,7 @@ impl AI {
             if let StopCondition::Time(dur) = self.stop_condition {
                 let time_taken = ::std::time::Instant::now() - self.start;
                 let remaining = dur.checked_sub(time_taken);
-                if remaining == None || remaining.unwrap() < ::std::time::Duration::new(0, ply as u32*4*1000*1000) {
+                if remaining == None || remaining.unwrap() < ::std::time::Duration::new(0, ply*4*1000*1000) {
                     self.stop_condition_triggered = true;
                     return true;
                 }
@@ -119,7 +119,7 @@ impl AI {
         false
     }
 
-    fn search_pv(&mut self, ply: isize, alpha: Score, beta: Score, depth: isize) -> Score {
+    fn search_pv(&mut self, ply: Ply, alpha: Score, beta: Score, depth: Depth) -> Score {
         if self.should_stop(ply) {
             return self.evaluation.evaluate(self.state);
         }
@@ -128,7 +128,7 @@ impl AI {
 
         // 1. Check if we lost.
         if self.state.won(1-self.state.current_player) {
-            return -WINNING_SCORE+ply;
+            return -WINNING_SCORE+ply as Score;
         }
 
         // 2. Check if we ran out of depth and have to evaluate the position staticly.
@@ -208,7 +208,7 @@ impl AI {
         alpha
     }
 
-    fn search_null(&mut self, ply: isize, beta: Score, depth: isize) -> Score {
+    fn search_null(&mut self, ply: Ply, beta: Score, depth: Depth) -> Score {
         if self.should_stop(ply) {
             return self.evaluation.evaluate(self.state);
         }
@@ -217,7 +217,7 @@ impl AI {
 
         // 1. Check if we lost.
         if self.state.won(1-self.state.current_player) {
-            return -WINNING_SCORE+ply;
+            return -WINNING_SCORE+ply as Score;
         }
 
         // 2. Check if we ran out of depth and have to evaluate the position staticly.
@@ -269,7 +269,7 @@ impl AI {
         alpha
     }
 
-    fn insert_transposition(&mut self, evaluation: ScoreType, best_move: Option<InternalMove>, depth: isize, pv: bool) {
+    fn insert_transposition(&mut self, evaluation: ScoreType, best_move: Option<InternalMove>, depth: Depth, pv: bool) {
         if best_move == None {
             return;
         }
@@ -277,7 +277,7 @@ impl AI {
         let transposition = Transposition {
             evaluation,
             best_move: best_move.unwrap(),
-            depth,
+            depth: depth,
             ply: self.state.ply,
         };
 
@@ -294,7 +294,7 @@ impl AI {
         }
     }
 
-    fn get_transposition_score(&mut self, alpha: Score, beta: Score, depth: isize) -> Option<(Score, bool)> {
+    fn get_transposition_score(&mut self, alpha: Score, beta: Score, depth: Depth) -> Option<(Score, bool)> {
         self.tt_lookups += 1;
         let tt_entry = self.main_tt.borrow().get(self.hash);
 
@@ -334,12 +334,11 @@ impl AI {
         self.pv_failed_nullsearches = 0;
 
         self.stop_condition_triggered = false;
-        //println!("Search depth:  {}", depth);
         self.start = ::std::time::Instant::now();
         let alpha = -WINNING_SCORE;
         let beta = WINNING_SCORE;
         let mut score = 0;
-        for d in 1.. {
+        for d in 1 as Depth.. {
             match self.stop_condition {
                 StopCondition::Depth(stop_depth) => {
                     if stop_depth < d {
