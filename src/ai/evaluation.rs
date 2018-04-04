@@ -160,7 +160,7 @@ fn kind(x: i8, y: i8) -> usize {
 mod tests {
     #[test]
     fn test_kinds() {
-        use ai::evaluation_cache::kind;
+        use ai::evaluation::kind;
 
         let x = 6;
         let y = 9;
